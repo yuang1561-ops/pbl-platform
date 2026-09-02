@@ -45,8 +45,9 @@ tar xzf /tmp/pbl-deploy.tar.gz -C /tmp/pbl-upd 2>/dev/null || true
 cp -r /tmp/pbl-upd/backend/app/* /opt/pbl-platform/backend/app/ 2>/dev/null || true
 # 课件
 [ -d /tmp/pbl-upd/courses ] && rm -rf /opt/pbl-platform/courses && cp -r /tmp/pbl-upd/courses /opt/pbl-platform/courses
-# 知识库
+# 知识库 + 工具卡
 [ -f /tmp/pbl-upd/data/kb.db ] && cp /tmp/pbl-upd/data/kb.db /opt/pbl-platform/data/kb.db
+[ -f /tmp/pbl-upd/data/toolcards.json ] && cp /tmp/pbl-upd/data/toolcards.json /opt/pbl-platform/data/toolcards.json
 # 前端静态
 [ -d /tmp/pbl-upd/frontend/dist ] && rm -rf /opt/pbl-static/pbl && cp -r /tmp/pbl-upd/frontend/dist /opt/pbl-static/pbl
 # 权限
