@@ -19,7 +19,8 @@
       <div class="method-tip" v-if="stepMethod">
         <span class="method-label">📘 本步方法：</span>
         <span class="method-text">{{ stepMethod }}</span>
-        <span class="method-note">填写内容将在最后一步生成工具卡</span>
+        <el-button v-if="stepToolcards.length" size="small" type="primary" link @click="openToolcards">📖 查看工具卡（{{ stepToolcards.length }}）</el-button>
+        <span class="method-note">填写内容将在最后一步生成工具包</span>
       </div>
 
       <!-- 第 0 步：选起点 -->
@@ -366,6 +367,8 @@ const aiLoading = ref(false)
 const aiQuestions = ref([])
 const toolkit = ref([])
 const toolkitOpen = ref(false)
+const toolcardData = ref([])
+const toolcardOpen = ref(false)
 
 // 每步使用的方法说明（最后一步生成工具卡）
 const STEP_METHOD = {
@@ -376,6 +379,22 @@ const STEP_METHOD = {
   5: '确认方案内容 · 导出 Word / 打印 / 存入项目库',
 }
 const stepMethod = computed(() => STEP_METHOD[step.value] || '')
+
+// 每步关联的工具卡 id（查看工具卡原文）
+const STEP_TOOLCARDS = {
+  1: ['tool2'],
+  2: ['tool1', 'tool7'],
+  3: ['tool3', 'tool4'],
+  4: ['tool9', 'tool10', 'tool44', 'tool47'],
+  5: ['tool25', 'tool43', 'tool18', 'tool35'],
+}
+const stepToolcards = computed(() => {
+  const ids = STEP_TOOLCARDS[step.value] || []
+  return toolcardData.value.filter(t => ids.includes(t.id))
+})
+function openToolcards() {
+  toolcardOpen.value = true
+}
 const intentLoading = ref(false)
 const intentResult = ref('')
 const elementsLoading = ref(false)
