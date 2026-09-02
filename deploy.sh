@@ -4,11 +4,10 @@
 # 流程: 本地构建 → git提交推送 → 打包 → 上传服务器 → 解压 → 重启 → 验证
 
 set -e
-SERVER="root@114.215.177.33"
+SERVER_HOST="114.215.177.33"
+SERVER_PASS="Gaoyuan112!"
 REMOTE_DIR="/opt/pbl-platform"
 STATIC_DIR="/opt/pbl-static"
-SSH="sshpass -p 'Gaoyuan112!' ssh -o StrictHostKeyChecking=no"
-SCP="sshpass -p 'Gaoyuan112!' scp -o StrictHostKeyChecking=no"
 PACKAGE="/tmp/pbl-deploy.tar.gz"
 
 echo "════════ PBL 部署脚本 ════════"
@@ -34,21 +33,31 @@ tar czf "$PACKAGE" \
 
 # 4. 上传
 echo "▶ [4/6] 上传到服务器..."
-eval "$SCP $PACKAGE $SERVER:/tmp/"
+SSHPASS="$SERVER_PASS" sshpass -e scp -o StrictHostKeyChecking=no "$PACKAGE" root@"$SERVER_HOST":/tmp/
 
 # 5. 服务器部署
 echo "▶ [5/6] 服务器解压 + 重启..."
-eval "$SSH 'rm -rf /tmp/pbl-upd && mkdir -p /tmp/pbl-upd && tar xzf /tmp/pbl-deploy.tar.gz -C /tmp/pbl-upd 2>/dev/null
-  cp -r /tmp/pbl-upd/backend/app/* $REMOTE_DIR/backend/app/ 2>/dev/null || true
-  [ -d /tmp/pbl-upd/courses ] && rm -rf $REMOTE_DIR/courses && cp -r /tmp/pbl-upd/courses $REMOTE_DIR/courses
-  [ -f /tmp/pbl-upd/data/kb.db ] && cp /tmp/pbl-upd/data/kb.db $REMOTE_DIR/data/kb.db
-  [ -d /tmp/pbl-upd/frontend/dist ] && rm -rf $STATIC_DIR/pbl && cp -r /tmp/pbl-upd/frontend/dist $STATIC_DIR/pbl
-  find $STATIC_DIR -type f -exec chmod 644 {} + 2>/dev/null
-  find $STATIC_DIR -type d -exec chmod 755 {} + 2>/dev/null
-  find $REMOTE_DIR -type f -exec chmod 644 {} + 2>/dev/null
-  systemctl restart pbl-platform
-  sleep 2
-  echo DONE'"
+SSHPASS="$SERVER_PASS" sshpass -e ssh -o StrictHostKeyChecking=no root@"$SERVER_HOST" 'bash -s' << 'REMOTE'
+set -e
+rm -rf /tmp/pbl-upd && mkdir -p /tmp/pbl-upd
+tar xzf /tmp/pbl-deploy.tar.gz -C /tmp/pbl-upd 2>/dev/null || true
+# 后端代码
+cp -r /tmp/pbl-upd/backend/app/* /opt/pbl-platform/backend/app/ 2>/dev/null || true
+# 课件
+[ -d /tmp/pbl-upd/courses ] && rm -rf /opt/pbl-platform/courses && cp -r /tmp/pbl-upd/courses /opt/pbl-platform/courses
+# 知识库
+[ -f /tmp/pbl-upd/data/kb.db ] && cp /tmp/pbl-upd/data/kb.db /opt/pbl-platform/data/kb.db
+# 前端静态
+[ -d /tmp/pbl-upd/frontend/dist ] && rm -rf /opt/pbl-static/pbl && cp -r /tmp/pbl-upd/frontend/dist /opt/pbl-static/pbl
+# 权限
+find /opt/pbl-static -type f -exec chmod 644 {} + 2>/dev/null || true
+find /opt/pbl-static -type d -exec chmod 755 {} + 2>/dev/null || true
+find /opt/pbl-platform -type f -exec chmod 644 {} + 2>/dev/null || true
+# 重启
+systemctl restart pbl-platform
+sleep 2
+echo "REMOTE_DONE"
+REMOTE
 
 # 6. 验证
 echo "▶ [6/6] 线上验证..."
