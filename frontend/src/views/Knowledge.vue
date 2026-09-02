@@ -58,11 +58,15 @@
       <div class="reader-head">
         <el-button link @click="closeBook()">← 返回书库</el-button>
         <span class="reader-title">{{ readingBook.title }}</span>
+        <div class="jump-box">
+          <el-input v-model="jumpPage" size="small" placeholder="跳页" class="jump-input" @keyup.enter="doJump" />
+          <el-button size="small" @click="doJump">跳</el-button>
+        </div>
         <el-pagination small layout="prev, pager, next" :total="readingBook.total_pages" :page-size="1"
           v-model:current-page="readingBook.page" @current-change="loadBookPage" />
       </div>
       <div class="reader-body" v-loading="pageLoading">
-        <pre class="reader-content">{{ readingBook.content }}</pre>
+        <div class="reader-content">{{ readingBook.content }}</div>
       </div>
       <div class="reader-nav">
         <el-button :disabled="readingBook.page <= 1" @click="readingBook.page--; loadBookPage()">← 上一页</el-button>
@@ -77,6 +81,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { get } from '../api'
+import { cleanOcrText } from '../ocrClean'
 
 const route = useRoute()
 const query = ref('')
@@ -88,6 +93,7 @@ const loading = ref(false)
 const books = ref([])
 const readingBook = ref(null)
 const pageLoading = ref(false)
+const jumpPage = ref('')
 
 async function loadTopics() {
   const d = await get('/kb/topics')
@@ -132,10 +138,19 @@ async function loadBookPage() {
   if (!readingBook.value) return
   pageLoading.value = true
   const d = await get('/kb/book', { title: readingBook.value.title, page: readingBook.value.page })
-  readingBook.value.content = d.content
+  readingBook.value.content = cleanOcrText(d.content)
   readingBook.value.total_pages = d.total_pages
   readingBook.value.page = d.page
   pageLoading.value = false
+}
+
+function doJump() {
+  const p = parseInt(jumpPage.value)
+  if (p >= 1 && p <= readingBook.value.total_pages) {
+    readingBook.value.page = p
+    loadBookPage()
+  }
+  jumpPage.value = ''
 }
 
 function closeBook() {
@@ -182,6 +197,8 @@ onMounted(async () => {
 .reader { margin-top: 8px; }
 .reader-head { display: flex; align-items: center; gap: 16px; background: #fff; border: 1px solid #e4e7ed; border-radius: 8px 8px 0 0; padding: 10px 16px; }
 .reader-title { font-weight: 600; flex: 1; }
+.jump-box { display: flex; align-items: center; gap: 4px; }
+.jump-input { width: 64px; }
 .reader-body { background: #fff; border: 1px solid #e4e7ed; border-top: none; padding: 20px 28px; min-height: 50vh; max-height: 65vh; overflow-y: auto; }
 .reader-content { white-space: pre-wrap; word-wrap: break-word; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 15px; line-height: 1.9; color: #303133; margin: 0; }
 .reader-nav { display: flex; align-items: center; justify-content: space-between; background: #fff; border: 1px solid #e4e7ed; border-top: none; border-radius: 0 0 8px 8px; padding: 10px 16px; }
