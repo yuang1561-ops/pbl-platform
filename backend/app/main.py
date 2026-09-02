@@ -134,6 +134,34 @@ def kb_topics():
     conn.close()
     return {"topics": [{"name": r["topic"], "count": r["cnt"]} for r in rows]}
 
+@app.get("/pbl-api/kb/books")
+def kb_books():
+    """9 本书列表（含页数、简介：取第 2 页内容为简介）"""
+    conn = get_conn()
+    rows = conn.execute("SELECT title, COUNT(*) as pages, MIN(page) as minp FROM books GROUP BY title ORDER BY pages DESC").fetchall()
+    books = []
+    for r in rows:
+        # 找目录页或前几页做简介
+        intro = ""
+        pages = conn.execute("SELECT content FROM books WHERE title=? AND page < 15 AND LENGTH(content) > 60 ORDER BY page LIMIT 3", (r["title"],)).fetchall()
+        if pages:
+            intro = pages[-1]["content"].replace("\n", " ")[:120]
+        books.append({"title": r["title"], "pages": r["pages"], "intro": intro})
+    conn.close()
+    return {"books": books}
+
+@app.get("/pbl-api/kb/book")
+def kb_book_page(title: str = Query(...), page: int = Query(1)):
+    """按书名+页码取内容"""
+    conn = get_conn()
+    row = conn.execute("SELECT page, content FROM books WHERE title=? AND page=?", (title, page)).fetchone()
+    if not row:
+        # 找最近页
+        row = conn.execute("SELECT page, content FROM books WHERE title=? ORDER BY ABS(page-?) LIMIT 1", (title, page)).fetchone()
+    total = conn.execute("SELECT COUNT(*) FROM books WHERE title=?", (title,)).fetchone()[0]
+    conn.close()
+    return {"title": title, "page": row["page"], "total_pages": total, "content": row["content"] if row else ""}
+
 # ═══════════════ 项目库 API ═══════════════
 
 BUILTIN_TEMPLATES = [
