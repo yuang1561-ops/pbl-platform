@@ -14,6 +14,22 @@
         <el-step title="生成方案" description="导出 Word" />
       </el-steps>
 
+      <!-- 当前步骤相关工具卡 -->
+      <div class="tools-panel" v-if="stepTools.length">
+        <el-collapse>
+          <el-collapse-item :title="'🛠️ 本步相关工具（' + stepTools.length + '）— 点击展开查看'">
+            <div v-for="t in stepTools" :key="t.id" class="tool-card">
+              <div class="tool-head">
+                <span class="tool-name">{{ t.name }}</span>
+                <span class="tool-desc">{{ t.desc }}</span>
+                <el-button size="small" link type="primary" @click="printTool(t)">🖨️ 打印</el-button>
+              </div>
+              <pre class="tool-content">{{ t.content }}</pre>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
+      </div>
+
       <!-- 第 0 步：选起点 -->
       <div v-if="step === 0" class="step-body">
         <h3>🎯 选择起点</h3>
@@ -176,7 +192,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { get, post, saveWorkshop, loadWorkshop } from '../api'
 
@@ -187,6 +203,19 @@ const saving = ref(false)
 const saveDialog = ref(false)
 const aiLoading = ref(false)
 const aiQuestions = ref([])
+const allTools = ref([])
+
+// 每步对应工具
+const STEP_TOOLS = {
+  1: ['tool2'],           // 定义意图 → PBL目标体系
+  2: ['tool1', 'tool7'],  // 驱动性问题 → 设计卡+分解表
+  3: ['tool3', 'tool4'],  // 立项五要素 → 画布+角色表
+  4: ['tool10', 'tool11', 'tool44'], // 生成方案 → 计划表+故事板+时间轴
+}
+const stepTools = computed(() => {
+  const ids = STEP_TOOLS[step.value] || []
+  return allTools.value.filter(t => ids.includes(t.id))
+})
 const intentLoading = ref(false)
 const intentResult = ref('')
 const elementsLoading = ref(false)
@@ -340,11 +369,22 @@ async function exportDoc() {
   exporting.value = false
 }
 
+function printTool(t) {
+  const w = window.open('', '_blank')
+  w.document.write(`<html><head><title>${t.name}</title>
+    <style>body{font-family:"PingFang SC",sans-serif;padding:32px;line-height:1.8}
+    h1{font-size:22px}h2{font-size:17px;margin-top:24px}pre{white-space:pre-wrap;font-family:inherit;font-size:14px}</style></head>
+    <body><h1>${t.name}</h1><p style="color:#666">${t.desc}</p><pre>${t.content.replace(/</g,'&lt;')}</pre>
+    <script>window.onload=()=>window.print()</scr${'ipt'}></body></html>`)
+  w.document.close()
+}
+
 onMounted(async () => {
   const d = await get('/templates')
   templates.value = d.templates
   const saved = loadWorkshop()
   if (saved) form.value = saved
+  try { const td = await get('/tools'); allTools.value = td.tools } catch (e) {}
 })
 </script>
 
@@ -361,6 +401,12 @@ onMounted(async () => {
 .t-title { font-weight: 600; margin-bottom: 4px; }
 .t-q { font-size: 12px; color: #909399; line-height: 1.5; }
 .step-actions { margin-top: 24px; display: flex; gap: 10px; }
+.tools-panel { margin: 16px 0 8px; }
+.tool-card { border: 1px solid #ebeef5; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; background: #fafbfc; }
+.tool-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.tool-name { font-weight: 600; font-size: 14px; white-space: nowrap; }
+.tool-desc { color: #909399; font-size: 12px; flex: 1; }
+.tool-content { white-space: pre-wrap; word-wrap: break-word; font-family: inherit; font-size: 13px; line-height: 1.7; color: #303133; background: #fff; border: 1px solid #f0f0f0; border-radius: 6px; padding: 10px 14px; max-height: 300px; overflow-y: auto; margin: 0; }
 .ai-gen { margin: 12px 0; display: flex; align-items: center; gap: 10px; }
 .ai-result-box { margin: 10px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ai-result-text { flex: 1; font-size: 14px; line-height: 1.6; }

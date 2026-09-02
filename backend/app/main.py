@@ -170,6 +170,28 @@ def kb_book_page(title: str = Query(...), page: int = Query(1)):
     conn.close()
     return {"title": title, "page": row["page"], "total_pages": total, "content": row["content"] if row else ""}
 
+# ═══════════════ 工具卡 API ═══════════════
+
+TOOLCARDS_PATH = BASE / "data" / "toolcards.json"
+
+def _load_toolcards():
+    if TOOLCARDS_PATH.exists():
+        import json as _json
+        return _json.loads(TOOLCARDS_PATH.read_text(encoding="utf-8"))
+    return []
+
+@app.get("/pbl-api/tools")
+def list_tools():
+    """全部工具卡"""
+    return {"tools": _load_toolcards()}
+
+@app.get("/pbl-api/tools/{tool_id}")
+def get_tool(tool_id: str):
+    for t in _load_toolcards():
+        if t["id"] == tool_id:
+            return t
+    return {"error": "not found"}
+
 # ═══════════════ 项目库 API ═══════════════
 
 BUILTIN_TEMPLATES = [
