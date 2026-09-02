@@ -270,6 +270,7 @@ class WorkshopData(BaseModel):
     objectives: str = ""
     evaluation_detail: str = ""
     resources: str = ""
+    phases: list = []
 
 class AIQuery(BaseModel):
     intent: str = ""
@@ -324,17 +325,16 @@ PROMPTS = {
 评价方案：<形成性评价+终结性评价，怎么评何时评>
 资源需求：<场地；物料；人员>
 只输出这三行，每行以"学习目标：/评价方案：/资源需求："开头。""",
-    "plan": """你是 PBL 研学课程设计专家。请为这门课生成三阶段实施计划。
+    "plan": """你是 PBL 研学课程设计专家。请为这门课设计 3 个实施阶段，每阶段一行，严格用 | 分隔 5 个字段，不要输出其他文字。
 课程意图：{intent}
 驱动性问题：{driving_question}
 目标受众：{audience}
 时长：{duration}
+场景：{scene}
 成果：{product}
-输出格式（每行一个阶段）：
-第一阶段 <阶段名>：<任务描述>（约X课时）
-第二阶段 <阶段名>：<任务描述>（约X课时）
-第三阶段 <阶段名>：<任务描述>（约X课时）
-只输出三行。""",
+每行格式：阶段名|时间|核心活动(2-3步，用；分隔)|学生产出|教师动作
+示例：策展启蒙|1课时|入项游戏破冰；分组认领文物|文物认领卡|引导讨论发放入项材料
+必须贴合课程主题。""",
 }
 
 def _call_deepseek(prompt):
@@ -389,6 +389,22 @@ def ai_action(data: AIAction):
                     result[k] = v.strip()
         return {"ok": True, "result": result}
     if data.action == "plan":
+        # 解析 | 分隔的结构化阶段
+        phases = []
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("阶段名") or "|" not in line:
+                continue
+            parts = [x.strip() for x in line.split("|")]
+            phases.append({
+                "name": parts[0],
+                "time": parts[1] if len(parts) > 1 else "",
+                "activities": parts[2] if len(parts) > 2 else "",
+                "output": parts[3] if len(parts) > 3 else "",
+                "teacher": parts[4] if len(parts) > 4 else "",
+            })
+        if phases:
+            return {"ok": True, "result": phases}
         return {"ok": True, "result": content}
     if data.action == "detail":
         result = {}
@@ -488,7 +504,30 @@ def workshop_export(data: WorkshopData):
     section("四、学习目标", data.objectives)
     section("五、评价方案", data.evaluation_detail)
     section("六、资源需求", data.resources)
-    section("七、实施计划", data.plan)
+    doc.add_heading("七、实施计划", level=1)
+    if data.phases:
+        from docx.shared import Cm as _Cm
+        table = doc.add_table(rows=1, cols=5)
+        table.style = "Table Grid"
+        hdr = table.rows[0].cells
+        for i, h in enumerate(["阶段", "时间", "核心活动", "学生产出", "教师动作"]):
+            hdr[i].text = h
+            hdr[i].paragraphs[0].runs[0].bold = True if hdr[i].paragraphs[0].runs else None
+        for idx, ph in enumerate(data.phases, 1):
+            row = table.add_row().cells
+            row[0].text = ph.get("name") or f"阶段{idx}"
+            row[1].text = ph.get("time") or ""
+            row[2].text = ph.get("activities") or ""
+            row[3].text = ph.get("output") or ""
+            row[4].text = ph.get("teacher") or ""
+        for row in table.rows:
+            row.cells[0].width = _Cm(2.5)
+            row.cells[1].width = _Cm(2)
+            row.cells[2].width = _Cm(5.5)
+            row.cells[3].width = _Cm(3)
+            row.cells[4].width = _Cm(3)
+    else:
+        doc.add_paragraph(data.plan or "（待补充）")
 
     # 保存到内存返回
     import io

@@ -153,16 +153,34 @@
               </el-form-item>
             </el-col>
             <el-col :span="24">
-              <el-form-item label="实施计划（阶段 / 任务 / 时间分配）">
-                <el-input type="textarea" :rows="5" v-model="form.plan" placeholder="第一阶段 入项+选题（1课时）｜第二阶段 研究文物（2课时）｜第三阶段 策展与展示（2课时）" />
+              <el-form-item label="实施计划（阶段编辑器：每阶段 = 名称 / 时间 / 核心活动 / 学生产出 / 教师动作）">
+                <div class="phases-editor">
+                  <div v-for="(ph, pi) in form.phases" :key="pi" class="phase-card">
+                    <div class="phase-head">
+                      <span class="phase-num">阶段 {{ pi + 1 }}</span>
+                      <el-button size="small" type="danger" link @click="removePhase(pi)">删除</el-button>
+                    </div>
+                    <el-row :gutter="10">
+                      <el-col :span="16"><el-input v-model="ph.name" size="small" placeholder="阶段名称，如：策展启蒙" /></el-col>
+                      <el-col :span="8"><el-input v-model="ph.time" size="small" placeholder="时间，如：1课时/40分钟" /></el-col>
+                    </el-row>
+                    <el-input class="phase-act" v-model="ph.activities" type="textarea" :rows="2" size="small"
+                      placeholder="核心活动（每步用分号隔开）：入项游戏；分组选题；确定驱动问题" />
+                    <el-row :gutter="10">
+                      <el-col :span="12"><el-input v-model="ph.output" size="small" placeholder="学生产出，如：选题卡" /></el-col>
+                      <el-col :span="12"><el-input v-model="ph.teacher" size="small" placeholder="教师动作，如：引导讨论/提供资料" /></el-col>
+                    </el-row>
+                  </div>
+                  <el-button type="primary" plain size="small" @click="addPhase">＋ 添加阶段</el-button>
+                </div>
               </el-form-item>
             </el-col>
           </el-row>
         </el-form>
         <div class="ai-gen">
           <el-button type="primary" plain :loading="detailLoading" @click="aiDetail">🤖 AI 一键补全详设</el-button>
-          <el-button type="primary" plain :loading="planLoading" @click="aiPlan">🤖 AI 生成实施计划</el-button>
-          <span class="ai-hint">AI 根据前面信息自动生成学习目标/评价/资源/计划</span>
+          <el-button type="primary" plain :loading="planLoading" @click="aiPlan">🤖 AI 生成阶段计划</el-button>
+          <span class="ai-hint">AI 根据前面信息自动生成学习目标/评价/资源/分阶段计划</span>
         </div>
         <div class="step-actions">
           <el-button @click="prev">上一步</el-button>
@@ -218,7 +236,19 @@
 
           <div class="doc-sec">
             <div class="doc-sec-title">七、实施计划</div>
-            <div class="doc-plan">{{ form.plan || '（待补充）' }}</div>
+            <div v-if="form.phases.length" class="plan-table-wrap">
+              <table class="plan-table">
+                <tr><th style="width:12%">阶段</th><th style="width:14%">时间</th><th>核心活动</th><th style="width:16%">学生产出</th><th style="width:16%">教师动作</th></tr>
+                <tr v-for="(ph, pi) in form.phases" :key="pi">
+                  <td class="td-ph">{{ ph.name || ('阶段' + (pi+1)) }}</td>
+                  <td>{{ ph.time || '—' }}</td>
+                  <td>{{ ph.activities || '—' }}</td>
+                  <td>{{ ph.output || '—' }}</td>
+                  <td>{{ ph.teacher || '—' }}</td>
+                </tr>
+              </table>
+            </div>
+            <div v-else class="doc-plan">{{ form.plan || '（待补充）' }}</div>
           </div>
         </div>
 
@@ -331,7 +361,8 @@ const saveForm = ref({ title: '', driving_q: '', product: '' })
 const form = ref({
   template_id: '', intent: '', driving_question: '', audience: '',
   age: '', duration: '', scene: '', product: '', evaluation: '', plan: '',
-  objectives: '', evaluation_detail: '', resources: ''
+  objectives: '', evaluation_detail: '', resources: '',
+  phases: []
 })
 
 function fillFromTemplate(t) {
@@ -347,13 +378,14 @@ function fillFromTemplate(t) {
   form.value.evaluation_detail = '形成性：过程评价矩阵（自评+互评）；终结性：' + (t.product || '成果展示') + ' 展示评价'
   form.value.resources = '场地：' + (t.scene || '杭州') + '；物料：学习单/评价表/展示材料'
   form.value.plan = ''
+  form.value.phases = []
 }
 
 const next = () => { if (step.value < 5) { step.value++; saveWorkshop(form.value) } }
 const prev = () => { step.value-- }
 const reset = () => {
   step.value = 0
-  form.value = { template_id: '', intent: '', driving_question: '', audience: '', age: '', duration: '', scene: '', product: '', evaluation: '', plan: '', objectives: '', evaluation_detail: '', resources: '' }
+  form.value = { template_id: '', intent: '', driving_question: '', audience: '', age: '', duration: '', scene: '', product: '', evaluation: '', plan: '', objectives: '', evaluation_detail: '', resources: '', phases: [] }
   saveWorkshop(form.value)
 }
 
@@ -387,6 +419,33 @@ async function aiElements() {
   elementsLoading.value = false
 }
 
+function addPhase() {
+  form.value.phases.push({ name: '', time: '', activities: '', output: '', teacher: '' })
+}
+
+function removePhase(i) {
+  form.value.phases.splice(i, 1)
+}
+
+// 解析 AI 文本或旧 plan 文本 → phases 数组
+function parsePlanToPhases(text) {
+  if (!text) return
+  const phases = []
+  text.split(/\n|｜/).forEach(line => {
+    line = line.trim()
+    if (!line) return
+    const m = line.match(/^第?[一二三四五六0-9]+阶段\s*[：:]?\s*(.+?)(?:（约?(.+?)）)?$/)
+    const content = m ? m[1] : line
+    const time = m && m[2] ? m[2] : ''
+    // 拆活动（分号/顿号分隔）
+    const parts = content.split(/[；;]/).map(s => s.trim()).filter(s => s)
+    const name = parts[0] || content
+    const acts = parts.slice(1).join('；')
+    phases.push({ name, time, activities: acts, output: '', teacher: '' })
+  })
+  if (phases.length) form.value.phases = phases
+}
+
 async function aiDetail() {
   detailLoading.value = true
   try {
@@ -414,8 +473,18 @@ async function aiPlan() {
       audience: form.value.audience, duration: form.value.duration, product: form.value.product
     })
     if (d.ok) {
-      form.value.plan = d.result
-      ElMessage.success('三阶段计划已生成，可修改')
+      if (Array.isArray(d.result)) {
+        // 后端已结构化：直接填入阶段编辑器
+        form.value.phases = d.result.map(ph => ({
+          name: ph.name || '', time: ph.time || '',
+          activities: ph.activities || '', output: ph.output || '', teacher: ph.teacher || ''
+        }))
+        form.value.plan = d.result.map((ph, i) => `第${i+1}阶段 ${ph.name}（${ph.time}）：${ph.activities}；产出：${ph.output}`).join('\n')
+      } else {
+        form.value.plan = d.result
+        parsePlanToPhases(d.result)
+      }
+      ElMessage.success('阶段计划已生成并填入表格，可修改')
     } else ElMessage.error('AI 生成失败：' + (d.error || ''))
   } catch (e) { ElMessage.error('AI 生成失败：' + e.message) }
   planLoading.value = false
@@ -574,6 +643,12 @@ onMounted(async () => {
 .method-label { font-weight: 600; color: #67c23a; }
 .method-text { color: #303133; }
 .method-note { margin-left: auto; color: #c0c4cc; font-size: 12px; }
+.phases-editor { width: 100%; }
+.phase-card { border: 1px solid #e4e7ed; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: #fafbfc; }
+.phase-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.phase-num { font-weight: 700; color: #409eff; font-size: 13px; }
+.phase-act { margin: 6px 0; }
+.phase-act :deep(textarea) { font-size: 13px; }
 .doc-preview { background: #fff; border: 1px solid #e4e7ed; border-radius: 10px; padding: 32px 40px; text-align: left; max-width: 760px; margin: 0 auto; }
 .doc-title { font-size: 24px; font-weight: 800; text-align: center; border-bottom: 3px solid #409eff; padding-bottom: 12px; margin-bottom: 10px; }
 .doc-meta { text-align: center; color: #909399; font-size: 13px; display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
@@ -585,6 +660,11 @@ onMounted(async () => {
 .doc-table td { border: 1px solid #e4e7ed; padding: 8px 14px; font-size: 14px; }
 .td-lbl { width: 110px; background: #f5f7fa; font-weight: 600; color: #606266; }
 .doc-plan { white-space: pre-wrap; line-height: 1.8; }
+.plan-table-wrap { overflow-x: auto; }
+.plan-table { width: 100%; border-collapse: collapse; }
+.plan-table th, .plan-table td { border: 1px solid #e4e7ed; padding: 8px 10px; font-size: 13px; text-align: left; vertical-align: top; line-height: 1.6; }
+.plan-table th { background: #f5f7fa; font-weight: 600; }
+.td-ph { font-weight: 600; color: #409eff; }
 .toolkit-gen { margin: 16px 0; text-align: center; background: #fdf6ec; border: 1px dashed #e6a23c; border-radius: 10px; padding: 16px; }
 .toolkit-hint { color: #909399; font-size: 12px; margin: 8px 0 0; }
 .tk-card { border: 1px solid #e4e7ed; border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
