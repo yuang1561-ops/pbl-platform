@@ -11,7 +11,8 @@
         <el-step title="定义意图" description="为什么做" />
         <el-step title="驱动性问题" description="项目的心脏" />
         <el-step title="立项五要素" description="画布" />
-        <el-step title="生成方案" description="导出 Word" />
+        <el-step title="课程详设" description="目标/评价/资源" />
+        <el-step title="完整预览" description="方案书 + 导出" />
       </el-steps>
 
       <!-- 当前步骤用到的方法提示（轻量，不占空间） -->
@@ -130,38 +131,105 @@
         </div>
       </div>
 
-      <!-- 第 4 步：生成方案 -->
+      <!-- 第 4 步：课程详设 -->
       <div v-else-if="step === 4" class="step-body">
-        <h3>📄 生成课程方案</h3>
-        <p class="step-tip">目的：把前 4 步组装成可编辑的 Word 课程方案。可补充实施计划后导出。</p>
+        <h3>📐 课程详设</h3>
+        <p class="step-tip">目的：把方案做厚——补全学习目标、评价方案、资源需求与实施计划，让课程可直接执行。</p>
         <el-form label-position="top">
-          <el-form-item label="实施计划（阶段 / 任务 / 里程碑，可补充）">
-            <el-input type="textarea" :rows="5" v-model="form.plan" placeholder="如：第一阶段 入项+选题（1课时）｜第二阶段 研究文物（2课时）｜第三阶段 策展与展示（2课时）" />
-          </el-form-item>
+          <el-row :gutter="16">
+            <el-col :span="24">
+              <el-form-item label="学习目标（知识 / 技能 / 素养，用分号隔开）">
+                <el-input type="textarea" :rows="3" v-model="form.objectives" placeholder="知识：了解布达佩斯与多瑙河文明；技能：学会策展与导览表达；素养：跨文化理解与协作" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="24">
+              <el-form-item label="评价方案（形成性 + 终结性，怎么评、何时评）">
+                <el-input type="textarea" :rows="3" v-model="form.evaluation_detail" placeholder="形成性：每阶段结束用评价矩阵自评互评；终结性：结营面向真实观众导览，用展示评价表" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="24">
+              <el-form-item label="资源需求（场地 / 物料 / 人员 / 合作方）">
+                <el-input type="textarea" :rows="3" v-model="form.resources" placeholder="场地：杭州博物馆展厅；物料：展签卡/评价表/讲解设备；人员：1 主讲 + 2 助教；合作：馆方讲解员" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="24">
+              <el-form-item label="实施计划（阶段 / 任务 / 时间分配）">
+                <el-input type="textarea" :rows="5" v-model="form.plan" placeholder="第一阶段 入项+选题（1课时）｜第二阶段 研究文物（2课时）｜第三阶段 策展与展示（2课时）" />
+              </el-form-item>
+            </el-col>
+          </el-row>
         </el-form>
         <div class="ai-gen">
-          <el-button type="primary" plain :loading="planLoading" @click="aiPlan" :disabled="!form.driving_question">
-            🤖 AI 生成三阶段计划
-          </el-button>
-          <span class="ai-hint" v-if="!form.plan">点击自动生成阶段计划（可修改）</span>
-        </div>
-        <div class="preview">
-          <h4>方案预览</h4>
-          <div class="pv-item"><b>意图：</b>{{ form.intent || '（待补充）' }}</div>
-          <div class="pv-item"><b>驱动性问题：</b>{{ form.driving_question || '（待补充）' }}</div>
-          <div class="pv-item"><b>受众：</b>{{ form.audience || '—' }} ｜ <b>年龄：</b>{{ form.age || '—' }} ｜ <b>时长：</b>{{ form.duration || '—' }}</div>
-          <div class="pv-item"><b>场景：</b>{{ form.scene || '—' }} ｜ <b>成果：</b>{{ form.product || '—' }}</div>
-          <div class="pv-item"><b>评估：</b>{{ form.evaluation || '—' }}</div>
-        </div>
-        <div class="toolkit-gen">
-          <el-button type="warning" size="large" @click="openToolkit">
-            🛠️ 生成课程工具包（预览本课全部工具卡）
-          </el-button>
-          <p class="toolkit-hint">把你在各步填写的内容，生成 4 张已填好的 PBL 工具卡（目标体系 / 驱动问题设计卡 / 五要素画布 / 实施计划表）</p>
+          <el-button type="primary" plain :loading="detailLoading" @click="aiDetail">🤖 AI 一键补全详设</el-button>
+          <el-button type="primary" plain :loading="planLoading" @click="aiPlan">🤖 AI 生成实施计划</el-button>
+          <span class="ai-hint">AI 根据前面信息自动生成学习目标/评价/资源/计划</span>
         </div>
         <div class="step-actions">
           <el-button @click="prev">上一步</el-button>
-          <el-button type="primary" :loading="exporting" @click="exportDoc">导出 Word 方案</el-button>
+          <el-button type="primary" @click="next">下一步：完整预览 →</el-button>
+        </div>
+      </div>
+
+      <!-- 第 5 步：完整方案预览 -->
+      <div v-else-if="step === 5" class="step-body">
+        <h3>📖 完整方案预览</h3>
+        <p class="step-tip">目的：以方案书形式预览整门课，确认后导出 Word / 打印 / 存入项目库。</p>
+
+        <div class="doc-preview">
+          <div class="doc-title">PBL 研学课程方案</div>
+          <div class="doc-meta">
+            <span v-if="form.audience">对象：{{ form.audience }}</span>
+            <span v-if="form.duration">时长：{{ form.duration }}</span>
+            <span v-if="form.scene">场景：{{ form.scene }}</span>
+          </div>
+
+          <div class="doc-sec">
+            <div class="doc-sec-title">一、课程意图</div>
+            <p>{{ form.intent || '（待补充）' }}</p>
+          </div>
+
+          <div class="doc-sec">
+            <div class="doc-sec-title">二、驱动性问题（项目的心脏）</div>
+            <div class="doc-driving-block">💡 {{ form.driving_question || '（待补充）' }}</div>
+          </div>
+
+          <div class="doc-sec">
+            <div class="doc-sec-title">三、立项要素</div>
+            <table class="doc-table">
+              <tr><td class="td-lbl">成果产出</td><td>{{ form.product || '—' }}</td></tr>
+              <tr><td class="td-lbl">评估方式</td><td>{{ form.evaluation || '—' }}</td></tr>
+            </table>
+          </div>
+
+          <div class="doc-sec">
+            <div class="doc-sec-title">四、学习目标</div>
+            <p>{{ form.objectives || '（待补充）' }}</p>
+          </div>
+
+          <div class="doc-sec">
+            <div class="doc-sec-title">五、评价方案</div>
+            <p>{{ form.evaluation_detail || '（待补充）' }}</p>
+          </div>
+
+          <div class="doc-sec">
+            <div class="doc-sec-title">六、资源需求</div>
+            <p>{{ form.resources || '（待补充）' }}</p>
+          </div>
+
+          <div class="doc-sec">
+            <div class="doc-sec-title">七、实施计划</div>
+            <div class="doc-plan">{{ form.plan || '（待补充）' }}</div>
+          </div>
+        </div>
+
+        <div class="toolkit-gen">
+          <el-button type="warning" size="large" @click="openToolkit">
+            🛠️ 生成课程工具包（本课工具卡）
+          </el-button>
+        </div>
+        <div class="step-actions">
+          <el-button @click="prev">上一步</el-button>
+          <el-button type="primary" :loading="exporting" @click="exportDoc">📄 导出详细 Word 方案</el-button>
           <el-button type="success" :loading="saving" @click="openSaveDialog">存入项目库</el-button>
           <el-button @click="reset">重新开始</el-button>
         </div>
@@ -249,18 +317,21 @@ const STEP_METHOD = {
   1: 'PBL 目标体系 · 确定课程意图与学习目标',
   2: '核心驱动问题设计卡 · 撰写与检验驱动性问题',
   3: '立项五要素画布 · 定清项目全貌',
-  4: '工作计划表 · 排定实施阶段',
+  4: '评价矩阵 · 设计学习目标与评价方案',
+  5: '确认方案内容 · 导出 Word / 打印 / 存入项目库',
 }
 const stepMethod = computed(() => STEP_METHOD[step.value] || '')
 const intentLoading = ref(false)
 const intentResult = ref('')
 const elementsLoading = ref(false)
 const planLoading = ref(false)
+const detailLoading = ref(false)
 const saveForm = ref({ title: '', driving_q: '', product: '' })
 
 const form = ref({
   template_id: '', intent: '', driving_question: '', audience: '',
-  age: '', duration: '', scene: '', product: '', evaluation: '', plan: ''
+  age: '', duration: '', scene: '', product: '', evaluation: '', plan: '',
+  objectives: '', evaluation_detail: '', resources: ''
 })
 
 function fillFromTemplate(t) {
@@ -272,14 +343,17 @@ function fillFromTemplate(t) {
   form.value.scene = t.scene || '杭州'
   form.value.product = t.product
   form.value.evaluation = '评价矩阵（过程 + 成果展示）'
+  form.value.objectives = '知识：' + t.title + '核心知识；技能：观察探究与表达；素养：协作与责任感'
+  form.value.evaluation_detail = '形成性：过程评价矩阵（自评+互评）；终结性：' + (t.product || '成果展示') + ' 展示评价'
+  form.value.resources = '场地：' + (t.scene || '杭州') + '；物料：学习单/评价表/展示材料'
   form.value.plan = ''
 }
 
-const next = () => { step.value++; saveWorkshop(form.value) }
+const next = () => { if (step.value < 5) { step.value++; saveWorkshop(form.value) } }
 const prev = () => { step.value-- }
 const reset = () => {
   step.value = 0
-  form.value = { template_id: '', intent: '', driving_question: '', audience: '', age: '', duration: '', scene: '', product: '', evaluation: '', plan: '' }
+  form.value = { template_id: '', intent: '', driving_question: '', audience: '', age: '', duration: '', scene: '', product: '', evaluation: '', plan: '', objectives: '', evaluation_detail: '', resources: '' }
   saveWorkshop(form.value)
 }
 
@@ -311,6 +385,25 @@ async function aiElements() {
     } else ElMessage.error('AI 生成失败：' + (d.error || ''))
   } catch (e) { ElMessage.error('AI 生成失败：' + e.message) }
   elementsLoading.value = false
+}
+
+async function aiDetail() {
+  detailLoading.value = true
+  try {
+    const d = await post('/workshop/ai', {
+      action: 'detail', intent: form.value.intent, driving_question: form.value.driving_question,
+      audience: form.value.audience, age: form.value.age, duration: form.value.duration,
+      scene: form.value.scene, product: form.value.product, evaluation: form.value.evaluation
+    })
+    if (d.ok && d.result) {
+      const r = d.result
+      if (r.objectives) form.value.objectives = r.objectives
+      if (r.evaluation_detail) form.value.evaluation_detail = r.evaluation_detail
+      if (r.resources) form.value.resources = r.resources
+      ElMessage.success('详设已生成，可修改')
+    } else ElMessage.error('AI 生成失败：' + (d.error || ''))
+  } catch (e) { ElMessage.error('AI 生成失败：' + e.message) }
+  detailLoading.value = false
 }
 
 async function aiPlan() {
@@ -481,6 +574,17 @@ onMounted(async () => {
 .method-label { font-weight: 600; color: #67c23a; }
 .method-text { color: #303133; }
 .method-note { margin-left: auto; color: #c0c4cc; font-size: 12px; }
+.doc-preview { background: #fff; border: 1px solid #e4e7ed; border-radius: 10px; padding: 32px 40px; text-align: left; max-width: 760px; margin: 0 auto; }
+.doc-title { font-size: 24px; font-weight: 800; text-align: center; border-bottom: 3px solid #409eff; padding-bottom: 12px; margin-bottom: 10px; }
+.doc-meta { text-align: center; color: #909399; font-size: 13px; display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
+.doc-sec { margin: 18px 0; }
+.doc-sec-title { font-weight: 700; font-size: 16px; color: #303133; margin-bottom: 6px; border-left: 3px solid #409eff; padding-left: 10px; }
+.doc-sec p { margin: 0; line-height: 1.8; color: #444; white-space: pre-wrap; }
+.doc-driving-block { font-size: 17px; font-weight: 700; color: #0f3d6b; background: #ecf5ff; border: 1px solid #b3d8ff; border-radius: 8px; padding: 14px 18px; line-height: 1.7; }
+.doc-table { width: 100%; border-collapse: collapse; }
+.doc-table td { border: 1px solid #e4e7ed; padding: 8px 14px; font-size: 14px; }
+.td-lbl { width: 110px; background: #f5f7fa; font-weight: 600; color: #606266; }
+.doc-plan { white-space: pre-wrap; line-height: 1.8; }
 .toolkit-gen { margin: 16px 0; text-align: center; background: #fdf6ec; border: 1px dashed #e6a23c; border-radius: 10px; padding: 16px; }
 .toolkit-hint { color: #909399; font-size: 12px; margin: 8px 0 0; }
 .tk-card { border: 1px solid #e4e7ed; border-radius: 10px; margin-bottom: 14px; overflow: hidden; }

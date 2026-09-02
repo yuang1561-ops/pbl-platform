@@ -267,6 +267,9 @@ class WorkshopData(BaseModel):
     product: str = ""
     evaluation: str = ""
     plan: str = ""
+    objectives: str = ""
+    evaluation_detail: str = ""
+    resources: str = ""
 
 class AIQuery(BaseModel):
     intent: str = ""
@@ -309,6 +312,18 @@ PROMPTS = {
 成果产出：<建议的最终成果>
 评估方式：<建议的评估方法>
 只输出这五行。""",
+    "detail": """你是 PBL 研学课程设计专家。请根据课程信息，补全课程详设（学习目标、评价方案、资源需求）。
+课程意图：{intent}
+驱动性问题：{driving_question}
+目标受众：{audience}
+时长：{duration}
+场景：{scene}
+成果：{product}
+输出格式（每行一个部分，直接给出内容）：
+学习目标：<知识目标；技能目标；素养目标>
+评价方案：<形成性评价+终结性评价，怎么评何时评>
+资源需求：<场地；物料；人员>
+只输出这三行，每行以"学习目标：/评价方案：/资源需求："开头。""",
     "plan": """你是 PBL 研学课程设计专家。请为这门课生成三阶段实施计划。
 课程意图：{intent}
 驱动性问题：{driving_question}
@@ -375,6 +390,16 @@ def ai_action(data: AIAction):
         return {"ok": True, "result": result}
     if data.action == "plan":
         return {"ok": True, "result": content}
+    if data.action == "detail":
+        result = {}
+        for l in content.splitlines():
+            if "：" in l:
+                k, v = l.split("：", 1)
+                k = k.strip()
+                if k == "学习目标": result["objectives"] = v.strip()
+                elif k == "评价方案": result["evaluation_detail"] = v.strip()
+                elif k == "资源需求": result["resources"] = v.strip()
+        return {"ok": True, "result": result}
     return {"ok": True, "result": content}
 
 @app.post("/pbl-api/workshop/ai-questions")
@@ -460,7 +485,10 @@ def workshop_export(data: WorkshopData):
         r = p.add_run(f"{k}：")
         r.bold = True
         p.add_run(v or "（待补充）")
-    section("四、实施计划", data.plan)
+    section("四、学习目标", data.objectives)
+    section("五、评价方案", data.evaluation_detail)
+    section("六、资源需求", data.resources)
+    section("七、实施计划", data.plan)
 
     # 保存到内存返回
     import io
