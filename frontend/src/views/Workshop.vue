@@ -50,6 +50,16 @@
             <el-input type="textarea" :rows="3" v-model="form.intent" placeholder="如：让学生成为主动的观察者与表达者，学会用策展思维讲述文物故事" />
           </el-form-item>
         </el-form>
+        <div class="ai-gen">
+          <el-button type="primary" plain :loading="intentLoading" @click="aiIntent" :disabled="!form.audience && !form.scene">
+            🤖 AI 提炼意图声明
+          </el-button>
+          <span class="ai-hint" v-if="!form.audience && !form.scene">（先填①②，AI 帮你写③）</span>
+        </div>
+        <el-alert v-if="intentResult" type="success" :closable="false" class="ai-result-box">
+          <div class="ai-result-text">{{ intentResult }}</div>
+          <el-button size="small" type="primary" link @click="form.intent = intentResult; intentResult = ''">采用</el-button>
+        </el-alert>
         <div class="step-actions">
           <el-button @click="prev">上一步</el-button>
           <el-button type="primary" @click="next">下一步</el-button>
@@ -101,6 +111,12 @@
           <el-col :span="12"><el-form-item label="成果产出"><el-input v-model="form.product" placeholder="如：迷你策展方案 + 讲解词" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="评估方式"><el-input v-model="form.evaluation" placeholder="如：评价矩阵（过程 + 成果）" /></el-form-item></el-col>
         </el-row>
+        <div class="ai-gen">
+          <el-button type="primary" plain :loading="elementsLoading" @click="aiElements" :disabled="!form.driving_question">
+            🤖 AI 建议五要素（自动填充）
+          </el-button>
+          <span class="ai-hint">基于意图+驱动问题生成建议，可逐项修改</span>
+        </div>
         <div class="step-actions">
           <el-button @click="prev">上一步</el-button>
           <el-button type="primary" @click="next">下一步</el-button>
@@ -116,6 +132,12 @@
             <el-input type="textarea" :rows="5" v-model="form.plan" placeholder="如：第一阶段 入项+选题（1课时）｜第二阶段 研究文物（2课时）｜第三阶段 策展与展示（2课时）" />
           </el-form-item>
         </el-form>
+        <div class="ai-gen">
+          <el-button type="primary" plain :loading="planLoading" @click="aiPlan" :disabled="!form.driving_question">
+            🤖 AI 生成三阶段计划
+          </el-button>
+          <span class="ai-hint" v-if="!form.plan">点击自动生成阶段计划（可修改）</span>
+        </div>
         <div class="preview">
           <h4>方案预览</h4>
           <div class="pv-item"><b>意图：</b>{{ form.intent || '（待补充）' }}</div>
@@ -165,6 +187,10 @@ const saving = ref(false)
 const saveDialog = ref(false)
 const aiLoading = ref(false)
 const aiQuestions = ref([])
+const intentLoading = ref(false)
+const intentResult = ref('')
+const elementsLoading = ref(false)
+const planLoading = ref(false)
 const saveForm = ref({ title: '', driving_q: '', product: '' })
 
 const form = ref({
@@ -190,6 +216,51 @@ const reset = () => {
   step.value = 0
   form.value = { template_id: '', intent: '', driving_question: '', audience: '', age: '', duration: '', scene: '', product: '', evaluation: '', plan: '' }
   saveWorkshop(form.value)
+}
+
+async function aiIntent() {
+  intentLoading.value = true
+  intentResult.value = ''
+  try {
+    const d = await post('/workshop/ai', { action: 'intent', audience: form.value.audience, scene: form.value.scene })
+    if (d.ok) intentResult.value = d.result
+    else ElMessage.error('AI 生成失败：' + (d.error || ''))
+  } catch (e) { ElMessage.error('AI 生成失败：' + e.message) }
+  intentLoading.value = false
+}
+
+async function aiElements() {
+  elementsLoading.value = true
+  try {
+    const d = await post('/workshop/ai', {
+      action: 'elements', intent: form.value.intent, driving_question: form.value.driving_question, audience: form.value.audience
+    })
+    if (d.ok && d.result) {
+      const r = d.result
+      if (r.age) form.value.age = r.age
+      if (r.duration) form.value.duration = r.duration
+      if (r.scene) form.value.scene = r.scene
+      if (r.product) form.value.product = r.product
+      if (r.evaluation) form.value.evaluation = r.evaluation
+      ElMessage.success('五要素已自动填充，可修改')
+    } else ElMessage.error('AI 生成失败：' + (d.error || ''))
+  } catch (e) { ElMessage.error('AI 生成失败：' + e.message) }
+  elementsLoading.value = false
+}
+
+async function aiPlan() {
+  planLoading.value = true
+  try {
+    const d = await post('/workshop/ai', {
+      action: 'plan', intent: form.value.intent, driving_question: form.value.driving_question,
+      audience: form.value.audience, duration: form.value.duration, product: form.value.product
+    })
+    if (d.ok) {
+      form.value.plan = d.result
+      ElMessage.success('三阶段计划已生成，可修改')
+    } else ElMessage.error('AI 生成失败：' + (d.error || ''))
+  } catch (e) { ElMessage.error('AI 生成失败：' + e.message) }
+  planLoading.value = false
 }
 
 async function aiGenerate() {
@@ -291,6 +362,8 @@ onMounted(async () => {
 .t-q { font-size: 12px; color: #909399; line-height: 1.5; }
 .step-actions { margin-top: 24px; display: flex; gap: 10px; }
 .ai-gen { margin: 12px 0; display: flex; align-items: center; gap: 10px; }
+.ai-result-box { margin: 10px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ai-result-text { flex: 1; font-size: 14px; line-height: 1.6; }
 .ai-hint { font-size: 12px; color: #c0c4cc; }
 .ai-results { margin: 12px 0; }
 .ai-item { display: flex; align-items: center; gap: 10px; border: 1px solid #dcdfe6; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; cursor: pointer; transition: all .2s; background: #fff; }

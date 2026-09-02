@@ -252,6 +252,109 @@ class AIQuery(BaseModel):
     scene: str = ""
     count: int = 3
 
+class AIAction(BaseModel):
+    action: str  # intent|polish|elements|plan|questions
+    intent: str = ""
+    audience: str = ""
+    scene: str = ""
+    driving_question: str = ""
+    age: str = ""
+    duration: str = ""
+    product: str = ""
+    evaluation: str = ""
+    plan: str = ""
+
+PROMPTS = {
+    "intent": """你是 PBL 研学课程设计专家。请根据以下信息，用一句话写出这门课的「意图声明」（不超过 60 字，说明希望学生带走什么能力）。
+目标受众：{audience}
+解决的真实问题：{scene}
+要求：直接输出意图声明，不要解释。""",
+    "polish": """你是 PBL 课程设计专家。请用 4 个标准（重要有意义/真实世界关联/开放有挑战/可持续探究）检验下面的驱动性问题，并给出改进后的版本。
+当前驱动性问题：{driving_question}
+课程受众：{audience}，场景：{scene}
+输出格式：
+问题诊断：<一句话指出最大问题>
+改进版本：<改写后的驱动性问题>
+只输出这两行。""",
+    "elements": """你是 PBL 研学课程设计专家。请根据课程信息，给出立项五要素建议。
+课程意图：{intent}
+驱动性问题：{driving_question}
+目标受众：{audience}
+输出格式（每行一个，直接给出建议值）：
+年龄：<建议年龄段>
+时长：<建议时长>
+场景：<建议场地>
+成果产出：<建议的最终成果>
+评估方式：<建议的评估方法>
+只输出这五行。""",
+    "plan": """你是 PBL 研学课程设计专家。请为这门课生成三阶段实施计划。
+课程意图：{intent}
+驱动性问题：{driving_question}
+目标受众：{audience}
+时长：{duration}
+成果：{product}
+输出格式（每行一个阶段）：
+第一阶段 <阶段名>：<任务描述>（约X课时）
+第二阶段 <阶段名>：<任务描述>（约X课时）
+第三阶段 <阶段名>：<任务描述>（约X课时）
+只输出三行。""",
+}
+
+def _call_deepseek(prompt):
+    import urllib.request as _req, json as _json
+    key = os.environ.get("DEEPSEEK_API_KEY", "")
+    if not key:
+        return None, "未配置 DEEPSEEK_API_KEY"
+    body = _json.dumps({
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.6,
+        "max_tokens": 400,
+        "stream": False
+    }).encode()
+    r = _req.Request("https://api.deepseek.com/chat/completions", data=body, headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + key})
+    try:
+        resp = _json.loads(_req.urlopen(r, timeout=60).read())
+        return resp["choices"][0]["message"]["content"].strip(), None
+    except Exception as e:
+        return None, str(e)
+
+@app.post("/pbl-api/workshop/ai")
+def ai_action(data: AIAction):
+    """通用 AI 动作：intent|polish|elements|plan"""
+    if data.action not in PROMPTS:
+        return {"ok": False, "error": "未知 action"}
+    prompt = PROMPTS[data.action].format(
+        intent=data.intent or "（未填写）",
+        audience=data.audience or "中小学生研学团",
+        scene=data.scene or "博物馆研学",
+        driving_question=data.driving_question or "（未填写）",
+        duration=data.duration or "半天",
+        product=data.product or "（未定）")
+    content, err = _call_deepseek(prompt)
+    if err:
+        return {"ok": False, "error": err}
+    # 解析结果
+    if data.action == "intent":
+        return {"ok": True, "result": content}
+    if data.action == "polish":
+        return {"ok": True, "result": content}
+    if data.action == "elements":
+        lines = [l for l in content.splitlines() if l.strip()]
+        result = {}
+        for l in lines:
+            if "：" in l:
+                k, v = l.split("：", 1)
+                k = k.strip().replace("年龄", "age").replace("时长", "duration").replace("场景", "scene").replace("成果产出", "product").replace("评估方式", "evaluation")
+                if k in ("age", "duration", "scene", "product", "evaluation"):
+                    result[k] = v.strip()
+        return {"ok": True, "result": result}
+    if data.action == "plan":
+        return {"ok": True, "result": content}
+    return {"ok": True, "result": content}
+
 @app.post("/pbl-api/workshop/ai-questions")
 def ai_generate_questions(data: AIQuery):
     """用 DeepSeek 生成候选驱动性问题"""
