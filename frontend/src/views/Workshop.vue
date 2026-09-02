@@ -266,6 +266,18 @@
       </div>
     </el-card>
 
+    <!-- 工具卡原文弹窗 -->
+    <el-dialog v-model="toolcardOpen" :title="'📖 本步工具卡（' + stepToolcards.length + '）'" width="680px" top="5vh">
+      <div v-for="t in stepToolcards" :key="t.id" class="tc-card">
+        <div class="tc-head">
+          <span class="tc-name">{{ t.name }}</span>
+          <span class="tc-desc">{{ t.desc }}</span>
+          <el-button size="small" link type="primary" @click="printToolcard(t)">🖨️ 打印</el-button>
+        </div>
+        <pre class="tc-content">{{ t.content }}</pre>
+      </div>
+    </el-dialog>
+
     <!-- 课程工具包预览弹窗 -->
     <el-dialog v-model="toolkitOpen" title="🛠️ 课程配套工具（可直接用于教学）" width="800px" top="4vh" class="toolkit-dialog">
       <div v-for="(card, ci) in toolkit" :key="ci" class="tk-card">
@@ -585,6 +597,16 @@ function openToolkit() {
   toolkitOpen.value = true
 }
 
+function printToolcard(t) {
+  const w = window.open('', '_blank')
+  w.document.write(`<html><head><title>${t.name}</title>
+    <style>body{font-family:"PingFang SC",sans-serif;padding:32px;line-height:1.8}
+    h1{font-size:22px}h2{font-size:17px;margin-top:24px}pre{white-space:pre-wrap;font-family:inherit;font-size:14px}</style></head>
+    <body><h1>${t.name}</h1><p style="color:#666">${t.desc}</p><pre>${t.content.replace(/</g,'&lt;')}</pre>
+    <script>window.onload=()=>window.print()</scr${'ipt'}></body></html>`)
+  w.document.close()
+}
+
 function printToolkit() {
   const t = toolkit.value
   let html = `<html><head><title>PBL 课程工具包</title>
@@ -645,7 +667,7 @@ onMounted(async () => {
   templates.value = d.templates
   const saved = loadWorkshop()
   if (saved) form.value = saved
-
+  try { const td = await get('/tools'); toolcardData.value = td.tools } catch (e) {}
 })
 </script>
 
@@ -688,6 +710,11 @@ onMounted(async () => {
 .plan-table th, .plan-table td { border: 1px solid #e4e7ed; padding: 8px 10px; font-size: 13px; text-align: left; vertical-align: top; line-height: 1.6; }
 .plan-table th { background: #f5f7fa; font-weight: 600; }
 .td-ph { font-weight: 600; color: #409eff; }
+.tc-card { border: 1px solid #e4e7ed; border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+.tc-head { display: flex; align-items: center; gap: 10px; background: #f5f7fa; padding: 10px 16px; border-bottom: 1px solid #e4e7ed; }
+.tc-name { font-weight: 700; white-space: nowrap; }
+.tc-desc { color: #909399; font-size: 12px; flex: 1; }
+.tc-content { white-space: pre-wrap; word-wrap: break-word; font-family: inherit; font-size: 13px; line-height: 1.7; padding: 12px 16px; max-height: 400px; overflow-y: auto; margin: 0; color: #303133; }
 .toolkit-gen { margin: 16px 0; text-align: center; background: #fdf6ec; border: 1px dashed #e6a23c; border-radius: 10px; padding: 16px; }
 .toolkit-hint { color: #909399; font-size: 12px; margin: 8px 0 0; }
 .tk-card { border: 1px solid #e4e7ed; border-radius: 10px; margin-bottom: 14px; overflow: hidden; }

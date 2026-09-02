@@ -3,6 +3,10 @@
     <div class="page-head">
       <h2>知识库</h2>
       <p>9 本 PBL 专著 · 2077 页全文可检索 · 点击书目直接阅读</p>
+      <el-tabs v-model="viewMode" class="kb-tabs">
+        <el-tab-pane label="📖 书籍库" name="books" />
+        <el-tab-pane label="🛠️ 工具卡（18）" name="tools" />
+      </el-tabs>
     </div>
 
     <!-- 搜索区 -->
@@ -21,6 +25,21 @@
       </div>
     </div>
 
+    <!-- 工具卡库视图 -->
+    <div v-if="viewMode === 'tools'" class="tools-lib" v-loading="toolsLoading">
+      <div class="tools-grid">
+        <el-card v-for="t in toolCards" :key="t.id" shadow="hover" class="tool-lib-card" @click="openToolCard(t)">
+          <div class="tool-lib-name">{{ t.name }}</div>
+          <div class="tool-lib-desc">{{ t.desc }}</div>
+        </el-card>
+      </div>
+    </div>
+
+    <el-dialog v-model="toolDetailOpen" :title="currentTool?.name" width="680px" top="5vh">
+      <p class="tool-detail-desc">{{ currentTool?.desc }}</p>
+      <pre class="tool-detail-content">{{ currentTool?.content }}</pre>
+    </el-dialog>
+
     <!-- 搜索结果 -->
     <div v-loading="loading" class="results" v-if="searched">
       <el-empty v-if="results.length === 0" description="未找到相关结果，换个关键词试试" />
@@ -37,7 +56,7 @@
     </div>
 
     <!-- 书库浏览（默认） -->
-    <div v-else-if="!readingBook" v-loading="loading">
+    <div v-else-if="!readingBook && viewMode === 'books'" v-loading="loading">
       <div class="book-grid">
         <el-card v-for="b in books" :key="b.title" shadow="hover" class="book-card" @click="openBook(b.title, 1)">
           <div class="book-head">
@@ -54,7 +73,7 @@
     </div>
 
     <!-- 书籍阅读器 -->
-    <div v-else class="reader">
+    <div v-else-if="readingBook" class="reader">
       <div class="reader-head">
         <el-button link @click="closeBook()">← 返回书库</el-button>
         <span class="reader-title">{{ readingBook.title }}</span>
@@ -93,6 +112,16 @@ const loading = ref(false)
 const books = ref([])
 const readingBook = ref(null)
 const pageLoading = ref(false)
+const viewMode = ref('books')
+const toolCards = ref([])
+const toolsLoading = ref(false)
+const toolDetailOpen = ref(false)
+const currentTool = ref(null)
+
+function openToolCard(t) {
+  currentTool.value = t
+  toolDetailOpen.value = true
+}
 const jumpPage = ref('')
 
 async function loadTopics() {
@@ -157,9 +186,19 @@ function closeBook() {
   readingBook.value = null
 }
 
+async function loadTools() {
+  toolsLoading.value = true
+  try {
+    const d = await get('/tools')
+    toolCards.value = d.tools
+  } catch (e) {}
+  toolsLoading.value = false
+}
+
 onMounted(async () => {
   await loadTopics()
   await loadBooks()
+  loadTools()
   // 支持从 URL 带 ?q= 进入（课件延伸阅读链接跳转）
   if (route.query.q) {
     query.value = route.query.q
@@ -170,6 +209,14 @@ onMounted(async () => {
 
 <style scoped>
 .page-head h2 { margin: 0 0 4px; }
+.kb-tabs { margin-top: 12px; }
+.tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 8px; }
+.tool-lib-card { cursor: pointer; transition: all .2s; }
+.tool-lib-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+.tool-lib-name { font-weight: 600; font-size: 15px; margin-bottom: 6px; }
+.tool-lib-desc { color: #909399; font-size: 13px; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tool-detail-desc { color: #909399; font-size: 13px; margin: 0 0 10px; }
+.tool-detail-content { white-space: pre-wrap; word-wrap: break-word; font-family: inherit; font-size: 13.5px; line-height: 1.8; max-height: 60vh; overflow-y: auto; background: #fafbfc; border: 1px solid #f0f0f0; border-radius: 6px; padding: 14px 16px; color: #303133; }
 .page-head p { color: #909399; margin: 0 0 16px; font-size: 13px; }
 .search-bar { max-width: 860px; }
 .topic-tags { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
