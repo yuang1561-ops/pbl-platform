@@ -10,5 +10,17 @@ const routes = [
 ]
 
 const router = createRouter({ history: createWebHistory('/pbl/'), routes })
-router.afterEach((to) => { document.title = to.meta.title + ' · PBL 导师工作台' })
+router.afterEach((to) => {
+  document.title = to.meta.title + ' · PBL 导师工作台'
+  // 简单埋点（fire-and-forget）
+  try {
+    const courseId = to.params.courseId || ''
+    fetch('/pbl-api/stats/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page: to.path, course_id: courseId }),
+      keepalive: true
+    }).catch(() => {})
+  } catch (e) {}
+})
 export default router

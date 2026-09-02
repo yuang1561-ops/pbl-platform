@@ -42,7 +42,7 @@ def main():
     if os.path.exists(DB):
         os.remove(DB)
     conn = sqlite3.connect(DB)
-    conn.execute("CREATE VIRTUAL TABLE books USING fts5(title, topic, page, content, tokenize='unicode61')")
+    conn.execute("CREATE VIRTUAL TABLE books USING fts5(title, topic, page, content, tokenize='trigram')")
     total = 0
     for title, fname in BOOKS:
         path = os.path.join(OCR_DIR, fname)

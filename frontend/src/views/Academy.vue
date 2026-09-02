@@ -1,8 +1,13 @@
 <template>
   <div>
     <div class="page-head">
-      <h2>培训学院</h2>
-      <p>32 课系统课件 · 6 大学习模块 · 从认知到线上 PBL · 学完即可用工坊实战</p>
+      <div class="head-row">
+        <div>
+          <h2>培训学院</h2>
+          <p>33 课系统课件 · 6 大学习模块 · 从认知到线上 PBL · 学完即可用工坊实战</p>
+        </div>
+        <el-button type="success" plain @click="exportReport">📄 导出学习报告</el-button>
+      </div>
     </div>
 
     <el-collapse v-model="activeModules" v-loading="loading">
@@ -53,9 +58,44 @@ onMounted(async () => {
   }))
   loading.value = false
 })
+
+function exportReport() {
+  const done = Object.values(progress.value).filter(p => p.finished).length
+  const total = modules.value.reduce((s, m) => s + m.courses.length, 0)
+  const pct = total ? Math.round(done / total * 100) : 0
+  const lines = []
+  lines.push('# PBL 导师学习报告')
+  lines.push('')
+  lines.push('- 生成时间：' + new Date().toLocaleString('zh-CN'))
+  lines.push('- 学习进度：' + done + ' / ' + total + ' 课（' + pct + '%）')
+  lines.push('')
+  lines.push('## 已完成课程')
+  lines.push('')
+  let anyDone = false
+  modules.value.forEach(m => m.courses.forEach(c => {
+    if (progress.value[c.id]?.finished) {
+      anyDone = true
+      lines.push('- ✅ ' + m.name + '｜' + c.title)
+    }
+  }))
+  if (!anyDone) lines.push('（暂无，去学院开始学习吧）')
+  lines.push('')
+  lines.push('## 学习说明')
+  lines.push('')
+  lines.push('- 学习进度保存在本机浏览器（localStorage），换设备不跟随')
+  lines.push('- 完成 33 课后，可用项目工坊设计自己的 PBL 课程')
+  const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'PBL学习报告_' + new Date().toISOString().slice(0, 10) + '.md'
+  a.click()
+  URL.revokeObjectURL(url)
+}
 </script>
 
 <style scoped>
+.head-row { display: flex; justify-content: space-between; align-items: flex-start; }
 .page-head h2 { margin: 0 0 4px; }
 .page-head p { color: #909399; margin: 0 0 16px; font-size: 13px; }
 .module-title { display: flex; align-items: center; gap: 10px; width: 100%; }

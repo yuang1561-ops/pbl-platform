@@ -99,31 +99,39 @@ def get_conn():
 @app.get("/pbl-api/kb/search")
 def kb_search(q: str = Query(..., min_length=1), topic: str = "", limit: int = 20):
     conn = get_conn()
-    # 转义 FTS5 特殊字符
-    esc = re.sub(r'["*()]', ' ', q).strip()
-    if not esc:
+    q = q.strip()
+    if not q:
         return {"results": []}
-    sql = "SELECT title, topic, page, snippet(books, -1, '[', ']', '…', 12) AS snip FROM books WHERE books MATCH ?"
-    params = [f'"{esc}"']
+    params = []
+    # trigram 索引：3 字及以上用 MATCH（精准+高亮），短词用 LIKE（覆盖）
+    where_parts = []
+    if len(q) >= 3:
+        esc = re.sub(r'["*()]', ' ', q).strip()
+        if esc:
+            where_parts.append("books MATCH ?")
+            params.append(f'"{esc}"')
+    if not where_parts or len(q) < 3:
+        where_parts.append("content LIKE ?")
+        params.append(f"%{q}%")
     if topic:
-        sql += " AND topic = ?"
+        where_parts.append("topic = ?")
         params.append(topic)
-    sql += " LIMIT ?"
+    sql = "SELECT title, topic, page, snippet(books, -1, '[', ']', '…', 10) AS snip FROM books WHERE " + " AND ".join(where_parts) + " LIMIT ?"
     params.append(limit)
     try:
         rows = conn.execute(sql, params).fetchall()
+        results = [{"title": r["title"], "topic": r["topic"], "page": r["page"], "snippet": r["snip"]} for r in rows]
     except Exception:
-        # 回退 LIKE 搜索
-        like = f"%{q}%"
+        # 最终兜底：纯 LIKE
         sql = "SELECT title, topic, page, substr(content, 1, 200) AS snip FROM books WHERE content LIKE ?"
-        params = [like]
+        params2 = [f"%{q}%"]
         if topic:
             sql += " AND topic = ?"
-            params.append(topic)
+            params2.append(topic)
         sql += " LIMIT ?"
-        params.append(limit)
-        rows = conn.execute(sql, params).fetchall()
-    results = [{"title": r["title"], "topic": r["topic"], "page": r["page"], "snippet": r["snip"]} for r in rows]
+        params2.append(limit)
+        rows = conn.execute(sql, params2).fetchall()
+        results = [{"title": r["title"], "topic": r["topic"], "page": r["page"], "snippet": r["snip"]} for r in rows]
     conn.close()
     return {"results": results, "total": len(results)}
 
@@ -238,6 +246,58 @@ class WorkshopData(BaseModel):
     evaluation: str = ""
     plan: str = ""
 
+class AIQuery(BaseModel):
+    intent: str = ""
+    audience: str = ""
+    scene: str = ""
+    count: int = 3
+
+@app.post("/pbl-api/workshop/ai-questions")
+def ai_generate_questions(data: AIQuery):
+    """用 DeepSeek 生成候选驱动性问题"""
+    import urllib.request as _urlopen_req
+    import json as _json
+    key = os.environ.get("DEEPSEEK_API_KEY", "")
+    if not key:
+        return {"ok": False, "error": "未配置 DEEPSEEK_API_KEY"}
+    prompt = f"""你是 PBL（项目式学习）课程设计专家。请根据以下信息设计 {data.count} 个高质量的驱动性问题。
+
+课程意图：{data.intent or "（未填写）"}
+目标受众：{data.audience or "中小学生研学团"}
+场景：{data.scene or "博物馆/城市研学"}（示例参考：杭州博物馆、西湖、良渚博物院、布达佩斯展）
+
+要求：
+1. 每个问题都满足：重要有意义、真实世界关联、开放有挑战、可持续探究
+2. 不要用"什么"类教科书式问题；不要是"是/否"就能回答的
+3. 尽量本地化、具体化，适合研学场景
+4. 问题要能让学生"用"知识而不是"背"知识
+
+输出格式（严格按此格式，每个问题一行）：
+Q1: <问题>
+Q2: <问题>
+Q3: <问题>
+只输出 Q1/Q2/Q3 三行，不要其他内容。"""
+    body = _json.dumps({
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "stream": False
+    }).encode()
+    req = _urlopen_req.Request("https://api.deepseek.com/chat/completions", data=body, headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + key
+    })
+    try:
+        resp = _json.loads(_urlopen_req.urlopen(req, timeout=60).read())
+        content = resp["choices"][0]["message"]["content"]
+        questions = [l.strip()[4:].strip() for l in content.splitlines() if l.strip().startswith("Q")]
+        if not questions:
+            questions = [l.strip() for l in content.splitlines() if l.strip()][:data.count]
+        return {"ok": True, "questions": questions[:data.count]}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 @app.post("/pbl-api/workshop/export")
 def workshop_export(data: WorkshopData):
     """生成课程方案 .docx"""
@@ -294,6 +354,53 @@ def workshop_export(data: WorkshopData):
 FRONT_DIST = BASE / "frontend" / "dist"
 if FRONT_DIST.exists():
     app.mount("/pbl", StaticFiles(directory=FRONT_DIST, html=True), name="pbl-front")
+
+# ═══════════════ 统计 & 反馈 ═══════════════
+
+def _init_meta_db():
+    conn = get_conn()
+    conn.execute("CREATE TABLE IF NOT EXISTS page_views (id INTEGER PRIMARY KEY AUTOINCREMENT, page TEXT, course_id TEXT DEFAULT '', ts TEXT DEFAULT CURRENT_TIMESTAMP)")
+    conn.execute("CREATE TABLE IF NOT EXISTS feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, course_id TEXT, rating INTEGER, note TEXT DEFAULT '', ts TEXT DEFAULT CURRENT_TIMESTAMP)")
+    conn.commit()
+    conn.close()
+
+@app.post("/pbl-api/stats/track")
+def track_view(data: dict):
+    _init_meta_db()
+    conn = get_conn()
+    conn.execute("INSERT INTO page_views(page, course_id) VALUES (?,?)", (data.get("page", ""), data.get("course_id", "")))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+@app.get("/pbl-api/stats")
+def get_stats():
+    _init_meta_db()
+    conn = get_conn()
+    total_views = conn.execute("SELECT COUNT(*) FROM page_views").fetchone()[0]
+    unique_pages = conn.execute("SELECT COUNT(DISTINCT page) FROM page_views").fetchone()[0]
+    today = conn.execute("SELECT COUNT(*) FROM page_views WHERE date(ts) = date('now','localtime')").fetchone()[0]
+    # 热门课程
+    hot = conn.execute("SELECT course_id, COUNT(*) c FROM page_views WHERE course_id != '' GROUP BY course_id ORDER BY c DESC LIMIT 5").fetchall()
+    # 反馈统计
+    fb_total = conn.execute("SELECT COUNT(*) FROM feedback").fetchone()[0]
+    fb_pos = conn.execute("SELECT COUNT(*) FROM feedback WHERE rating >= 4").fetchone()[0]
+    conn.close()
+    return {
+        "views": total_views, "pages": unique_pages, "today": today,
+        "hot_courses": [{"id": r["course_id"], "count": r["c"]} for r in hot],
+        "feedback": {"total": fb_total, "positive": fb_pos}
+    }
+
+@app.post("/pbl-api/feedback")
+def submit_feedback(data: dict):
+    _init_meta_db()
+    conn = get_conn()
+    conn.execute("INSERT INTO feedback(course_id, rating, note) VALUES (?,?,?)",
+                 (data.get("course_id", ""), data.get("rating", 0), data.get("note", "")))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
 
 @app.get("/pbl-api/health")
 def health():

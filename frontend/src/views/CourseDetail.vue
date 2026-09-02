@@ -5,8 +5,14 @@
         <el-button link @click="$router.push('/academy')">← 返回学院</el-button>
         <el-button link @click="markFinished" type="success" v-if="!finished">✅ 标记本课学完</el-button>
         <el-tag v-else type="success" effect="plain">本课已学完</el-tag>
+        <el-button link type="primary" @click="printCourse">🖨️ 打印 / 导出 PDF</el-button>
       </div>
       <div class="doc" v-html="renderedHtml"></div>
+      <div class="feedback-bar">
+        <span class="fb-label">这课对你有帮助吗？</span>
+        <el-rate v-model="fbRating" :max="5" @change="submitFeedback" />
+        <span class="fb-hint" v-if="fbSubmitted">感谢反馈 🙏</span>
+      </div>
       <div class="course-nav">
         <el-button v-if="prevCourse" link type="primary" @click="$router.push('/academy/' + prevCourse.id)">
           ← 上一课：{{ prevCourse.title }}
@@ -37,6 +43,8 @@ finished.value = !!progress.finished
 const navCourses = ref([])
 const prevCourse = ref(null)
 const nextCourse = ref(null)
+const fbRating = ref(0)
+const fbSubmitted = ref(false)
 
 const renderedHtml = computed(() => {
   if (!course.value) return ''
@@ -48,6 +56,20 @@ watch(renderedHtml, async () => {
   await nextTick()
   enhanceQuiz(document.querySelector('.doc'))
 })
+
+function printCourse() {
+  window.print()
+}
+
+function submitFeedback(val) {
+  if (!val) return
+  fetch('/pbl-api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ course_id: route.params.courseId, rating: val }),
+    keepalive: true
+  }).then(() => { fbSubmitted.value = true }).catch(() => {})
+}
 
 function markFinished() {
   finished.value = true
@@ -73,8 +95,17 @@ onMounted(async () => {
 
 <style>
 .crumb { margin-bottom: 12px; display: flex; gap: 8px; align-items: center; }
+.feedback-bar { max-width: 960px; background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 12px 20px; margin-top: 16px; display: flex; align-items: center; gap: 14px; }
+.fb-label { font-size: 14px; color: #606266; }
+.fb-hint { font-size: 13px; color: #67c23a; }
 .course-nav { display: flex; justify-content: space-between; margin-top: 20px; max-width: 960px; padding: 0 8px; }
 .doc { background: #fff; border-radius: 8px; padding: 32px 40px; line-height: 1.9; font-size: 15px; box-shadow: 0 1px 4px rgba(0,0,0,.06); max-width: 960px; }
+@media print {
+  .sidebar, .crumb, .course-nav, .mobile-topbar { display: none !important; }
+  .main { margin-left: 0 !important; padding: 0 !important; }
+  .doc { box-shadow: none !important; border-radius: 0 !important; max-width: 100% !important; padding: 0 !important; }
+  .quiz-option, .quiz-tip, details { break-inside: avoid; }
+}
 @media (max-width: 768px) {
   .doc { max-width: 100%; padding: 18px 14px !important; font-size: 14px; }
   .course-nav { max-width: 100%; }

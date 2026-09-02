@@ -18,6 +18,21 @@
       </el-col>
     </el-row>
 
+    <el-card v-if="usage" shadow="never" class="usage-card">
+      <div class="usage-title">📊 平台使用情况</div>
+      <div class="usage-grid">
+        <div class="usage-item"><span class="u-num">{{ usage.views }}</span><span class="u-label">累计访问</span></div>
+        <div class="usage-item"><span class="u-num">{{ usage.today }}</span><span class="u-label">今日访问</span></div>
+        <div class="usage-item"><span class="u-num">{{ usage.feedback.total }}</span><span class="u-label">课程反馈</span></div>
+        <div class="usage-item"><span class="u-num">{{ usage.pages }}</span><span class="u-label">访问页面数</span></div>
+      </div>
+      <div v-if="usage.hot_courses.length" class="hot-list">
+        <span class="hot-title">最热课程：</span>
+        <el-tag v-for="h in usage.hot_courses" :key="h.id" size="small" type="warning" effect="light" class="hot-tag"
+          @click="$router.push('/academy/' + h.id)">{{ h.id }} ({{ h.count }})</el-tag>
+      </div>
+    </el-card>
+
     <el-row :gutter="16" class="cards">
       <el-col :span="6" v-for="c in features" :key="c.title">
         <el-card shadow="hover" class="feature-card" @click="$router.push(c.path)">
@@ -31,6 +46,14 @@
 </template>
 
 <script setup>
+import { ref, onMounted } from 'vue'
+import { get } from '../api'
+
+const usage = ref(null)
+onMounted(async () => {
+  try { usage.value = await get('/stats') } catch (e) {}
+})
+
 const stats = [
   { value: '33', label: '系统课件' },
   { value: '6', label: '学习模块' },
@@ -51,6 +74,15 @@ const features = [
 .hero h1 { font-size: 32px; margin: 8px 0; }
 .hero p { color: #cfd8e3; font-size: 15px; margin-bottom: 20px; }
 .stats { margin-top: 20px; }
+.usage-card { margin-top: 20px; max-width: 1200px; }
+.usage-title { font-weight: 600; margin-bottom: 12px; }
+.usage-grid { display: flex; gap: 40px; }
+.usage-item { display: flex; flex-direction: column; }
+.u-num { font-size: 26px; font-weight: 800; color: #303133; }
+.u-label { font-size: 12px; color: #909399; }
+.hot-list { margin-top: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.hot-title { font-size: 13px; color: #606266; }
+.hot-tag { cursor: pointer; }
 .stat-card { text-align: center; padding: 8px 0; }
 .stat-num { font-size: 32px; font-weight: 800; color: #409eff; }
 .stat-label { color: #909399; font-size: 13px; margin-top: 4px; }

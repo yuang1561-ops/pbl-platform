@@ -65,6 +65,22 @@
             <el-input type="textarea" :rows="3" v-model="form.driving_question" placeholder="如：如何为一件文物设计一场展览，让同龄人愿意来看？" />
           </el-form-item>
         </el-form>
+
+        <div class="ai-gen">
+          <el-button type="primary" plain :loading="aiLoading" @click="aiGenerate" :disabled="!form.intent && !form.driving_question">
+            🤖 AI 生成候选问题
+          </el-button>
+          <span class="ai-hint" v-if="!form.intent">（建议先填第 1 步「意图」，生成更精准）</span>
+        </div>
+        <div v-if="aiQuestions.length" class="ai-results">
+          <div v-for="(q, i) in aiQuestions" :key="i" class="ai-item" @click="useAiQuestion(q)">
+            <span class="ai-num">Q{{ i + 1 }}</span>
+            <span class="ai-text">{{ q }}</span>
+            <el-tag size="small" type="success" effect="light" class="ai-use">选用 →</el-tag>
+          </div>
+          <p class="ai-note">点击任一问题即填入上方输入框，可继续修改</p>
+        </div>
+
         <el-alert type="info" :closable="false" title="提示">
           不要用「什么」类问题（教科书式）；不要是「是/否」就能回答；要本地化、具体化。卡住时用公式：我们作为【谁】，为【谁】做【什么】，为了【什么目的】？
         </el-alert>
@@ -147,6 +163,8 @@ const templates = ref([])
 const exporting = ref(false)
 const saving = ref(false)
 const saveDialog = ref(false)
+const aiLoading = ref(false)
+const aiQuestions = ref([])
 const saveForm = ref({ title: '', driving_q: '', product: '' })
 
 const form = ref({
@@ -172,6 +190,33 @@ const reset = () => {
   step.value = 0
   form.value = { template_id: '', intent: '', driving_question: '', audience: '', age: '', duration: '', scene: '', product: '', evaluation: '', plan: '' }
   saveWorkshop(form.value)
+}
+
+async function aiGenerate() {
+  aiLoading.value = true
+  aiQuestions.value = []
+  try {
+    const d = await post('/workshop/ai-questions', {
+      intent: form.value.intent,
+      audience: form.value.audience,
+      scene: form.value.scene,
+      count: 3
+    })
+    if (d.ok) {
+      aiQuestions.value = d.questions
+      if (!d.questions.length) ElMessage.warning('AI 没有返回结果，请重试')
+    } else {
+      ElMessage.error('AI 生成失败：' + (d.error || '未知错误'))
+    }
+  } catch (e) {
+    ElMessage.error('AI 生成失败：' + e.message)
+  }
+  aiLoading.value = false
+}
+
+function useAiQuestion(q) {
+  form.value.driving_question = q
+  ElMessage.success('已填入，可继续修改')
 }
 
 function openSaveDialog() {
@@ -245,6 +290,15 @@ onMounted(async () => {
 .t-title { font-weight: 600; margin-bottom: 4px; }
 .t-q { font-size: 12px; color: #909399; line-height: 1.5; }
 .step-actions { margin-top: 24px; display: flex; gap: 10px; }
+.ai-gen { margin: 12px 0; display: flex; align-items: center; gap: 10px; }
+.ai-hint { font-size: 12px; color: #c0c4cc; }
+.ai-results { margin: 12px 0; }
+.ai-item { display: flex; align-items: center; gap: 10px; border: 1px solid #dcdfe6; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; cursor: pointer; transition: all .2s; background: #fff; }
+.ai-item:hover { border-color: #67c23a; background: #f0f9eb; }
+.ai-num { font-weight: 700; color: #67c23a; font-size: 13px; flex-shrink: 0; }
+.ai-text { font-size: 14px; line-height: 1.6; flex: 1; }
+.ai-use { flex-shrink: 0; }
+.ai-note { font-size: 12px; color: #c0c4cc; margin: 4px 0 0; }
 .preview { background: #f8f9fb; border: 1px dashed #dcdfe6; border-radius: 8px; padding: 16px; margin-top: 10px; }
 .preview h4 { margin: 0 0 10px; }
 .pv-item { font-size: 14px; margin-bottom: 6px; }
