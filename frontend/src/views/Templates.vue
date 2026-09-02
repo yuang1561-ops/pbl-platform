@@ -52,7 +52,8 @@ function useTemplate(t) {
     scene: '杭州',
     product: t.product,
     evaluation: '评价矩阵（过程 + 成果展示）',
-    plan: ''
+    plan: '',
+    objectives: '', evaluation_detail: '', resources: '', phases: []
   })
   router.push('/workshop')
 }

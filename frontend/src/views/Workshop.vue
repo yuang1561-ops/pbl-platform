@@ -666,7 +666,16 @@ onMounted(async () => {
   const d = await get('/templates')
   templates.value = d.templates
   const saved = loadWorkshop()
-  if (saved) form.value = saved
+  if (saved) {
+    // 合并默认字段，防止旧草稿缺新字段（phases/objectives 等）
+    const defaults = {
+      template_id: '', intent: '', driving_question: '', audience: '',
+      age: '', duration: '', scene: '', product: '', evaluation: '', plan: '',
+      objectives: '', evaluation_detail: '', resources: '', phases: []
+    }
+    form.value = { ...defaults, ...saved }
+    if (!Array.isArray(form.value.phases)) form.value.phases = []
+  }
   try { const td = await get('/tools'); toolcardData.value = td.tools } catch (e) {}
 })
 </script>
