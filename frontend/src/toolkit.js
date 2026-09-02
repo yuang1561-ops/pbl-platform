@@ -1,74 +1,65 @@
-// 工坊工具包生成器：把导师在工坊各步填的内容，映射进结构化工具模板
-// 每张工具卡 = 一个可视化表格/卡片，字段值来自工坊表单
-
-function inferBeneficiary(form) {
-  const s = (form.scene || '') + (form.product || '')
-  if (/博物馆|展览|文物|展/.test(s)) return '同龄学生 / 参观者（面向展览观众）'
-  if (/西湖|水质|环境|自然/.test(s)) return '社区居民 / 西湖游客'
-  if (/丝绸|丝路/.test(s)) return '同龄学生 / 文化爱好者'
-  if (/南宋|宋韵/.test(s)) return '同龄学生 / 文化体验者'
-  return form.audience ? form.audience + ' 及受益群体' : '（待补充）'
-}
+// 工坊工具包生成器：配套执行工具（非重复方案信息）
+// 4 张卡：驱动问题分解表 / 评价矩阵结构化表 / 三维检验卡 / 实施计划表
 
 export function buildToolkit(form) {
   const tools = []
 
-  // 卡1：PBL 目标体系（来自第1步 意图 + 第4步 学习目标）
-  const objParts = []
-  const obj = form.objectives || ''
-  // objectives 形如 "知识：X；技能：Y；素养：Z"
-  if (obj) {
-    obj.split(/[；;]/).forEach(s => {
-      s = s.trim()
-      if (s) objParts.push({ k: s.split(/[：:]/)[0] || '目标', v: s.split(/[：:]/).slice(1).join('：').trim() || s })
-    })
-  }
+  // 卡1：驱动问题分解表（AI 生成子问题→任务→产出）
+  // 若 phases 有子问题字段则用，否则用 AI decompose 结果（未来）
+  const decompRows = form.phases && form.phases.length
+    ? form.phases.map((ph, i) => ({
+        sub_q: `子问题${i+1}：${ph.name || '阶段' + (i+1)}`,
+        task: ph.activities || '—',
+        output: ph.output || '—',
+        milestone: ph.time || '—'
+      }))
+    : [{ sub_q: '（待 AI 生成驱动问题分解）', task: '—', output: '—', milestone: '—' }]
   tools.push({
-    name: 'PBL 目标体系',
-    icon: '🎯',
-    desc: '课程目标（来自第 1 步·意图 + 第 4 步·学习目标）',
-    rows: [
-      { label: '课程意图', value: form.intent || '（待补充）' },
-      { label: '目标受众', value: form.audience || '（待补充）' },
-      { label: '解决的真实问题', value: form.scene || '（待补充）' },
-    ],
-    objectives: objParts.length ? objParts : null,
-  })
-
-  // 卡2：核心驱动问题设计卡（来自第2步 驱动性问题）
-  tools.push({
-    name: '核心驱动问题设计卡',
+    name: '驱动问题分解表',
     icon: '❓',
-    desc: '项目的心脏（来自第 2 步·驱动性问题）',
-    rows: [
-      { label: '谁？（项目主体）', value: form.audience || '（待补充）' },
-      { label: '为谁？（服务对象）', value: inferBeneficiary(form) },
-      { label: '解决什么问题？', value: form.scene || '（待补充）' },
-      { label: '驱动性问题（定稿）', value: form.driving_question || '（待补充）', highlight: true },
-    ],
-    checklist: [
-      { label: '有兴趣（学生视角）', checked: !!form.driving_question },
-      { label: '有挑战（可完成）', checked: !!form.driving_question },
-      { label: '有意义（现实价值）', checked: !!form.driving_question },
-    ],
+    desc: '把核心问题拆成 3-4 个子问题，每个对应任务与产出',
+    note: '💡 点击"AI 生成阶段计划"后，此处自动填充分解表',
+    decompCols: ['子问题', '核心任务', '学生产出', '里程碑'],
+    decompRows: decompRows,
   })
 
-  // 卡3：立项五要素画布（来自第3步 五要素）
+  // 卡2：评价矩阵结构化表（4 列：评价内容/证据/方式/时机）
+  const rubricRows = form.evaluation_detail
+    ? form.evaluation_detail.split(/[；;]/).map(s => s.trim()).filter(s => s).map(s => {
+        const m = s.match(/^(形成性|终结性)[：: ]*(.*)$/)
+        if (m) {
+          return {
+            criterion: m[1] + '评价',
+            evidence: m[2].slice(0, 30),
+            method: '评价矩阵/展示评价',
+            timing: m[1] === '形成性' ? '各阶段结束' : '结营展示'
+          }
+        }
+        return { criterion: s.slice(0, 20), evidence: '—', method: '—', timing: '—' }
+      })
+    : [{ criterion: '（待补充评价方案）', evidence: '—', method: '—', timing: '—' }]
   tools.push({
-    name: '立项五要素画布',
-    icon: '📋',
-    desc: '项目全貌一图看（来自第 3 步·立项五要素）',
-    grid: [
-      { label: '核心驱动问题', value: form.driving_question || '—' },
-      { label: '适用年龄', value: form.age || '—' },
-      { label: '时长', value: form.duration || '—' },
-      { label: '场景', value: form.scene || '—' },
-      { label: '成果产出', value: form.product || '—' },
-      { label: '评估方式', value: form.evaluation || '—' },
-    ],
+    name: '评价矩阵结构化表',
+    icon: '📊',
+    desc: '把评价方案拆成 4 列可执行表格',
+    rubricCols: ['评价内容', '证据', '评价方式', '评价时机'],
+    rubricRows: rubricRows,
   })
 
-  // 卡4：实施计划表（来自第4步 结构化 phases）——5 列完整表格
+  // 卡3：驱动问题三维检验卡（自检+改进建议）
+  tools.push({
+    name: '驱动问题三维检验卡',
+    icon: '✅',
+    desc: '用三个维度检验驱动性问题质量',
+    checklist: [
+      { label: '有兴趣（学生视角）', checked: !!form.driving_question, tip: '学生是否觉得"这问题跟我有关"？' },
+      { label: '有挑战（可完成）', checked: !!form.driving_question, tip: '难度是否在学生最近发展区内？' },
+      { label: '有意义（现实价值）', checked: !!form.driving_question, tip: '解决问题是否有真实受益者？' },
+    ],
+    note: form.driving_question ? `✅ 你的驱动问题："${form.driving_question.slice(0,40)}${form.driving_question.length>40?'…':''}" 已填入，建议邀请 2-3 位学生试读，收集反馈后微调。` : '⚠️ 请先在第 2 步填写驱动性问题',
+  })
+
+  // 卡4：实施计划表（5 列完整表格）
   const hasPhases = Array.isArray(form.phases) && form.phases.length > 0
   tools.push({
     name: '课程实施计划表',

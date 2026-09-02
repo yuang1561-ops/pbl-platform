@@ -279,7 +279,7 @@ class AIQuery(BaseModel):
     count: int = 3
 
 class AIAction(BaseModel):
-    action: str  # intent|polish|elements|plan|questions
+    action: str  # intent|polish|elements|plan|questions|decompose|rubric
     intent: str = ""
     audience: str = ""
     scene: str = ""
@@ -313,6 +313,23 @@ PROMPTS = {
 成果产出：<建议的最终成果>
 评估方式：<建议的评估方法>
 只输出这五行。""",
+    "decompose": """你是 PBL 课程设计专家。请把核心驱动问题分解成 3-4 个子问题，每个子问题对应一个任务和产出。
+驱动性问题：{driving_question}
+场景：{scene}
+受众：{audience}
+时长：{duration}
+输出格式（严格 3-4 行，每行用 | 分隔 4 字段）：
+子问题 | 核心任务（2-3步，用；分隔） | 学生产出 | 里程碑节点
+示例：文物想说什么？| 听文物自述音频；分组认领文物角色卡；写一句"文物心声"独白 | 文物身份卡+独白稿 | 入项完成
+必须贴合本课程。""",
+    "rubric": """你是 PBL 评价设计专家。请把评价方案拆成结构化评价矩阵（4 列）。
+课程场景：{scene}
+受众：{audience}
+评价方案原文：{evaluation}
+输出格式（严格 3-4 行，每行用 | 分隔 4 字段）：
+评价内容 | 证据 | 评价方式 | 评价时机
+示例：策展内容准确性 | 文物身份卡 + 导览词 | 教师用评价表打分 + 同伴互评 | 第 2 阶段结束
+必须贴合本课程。""",
     "detail": """你是 PBL 研学课程设计专家。请根据课程信息，补全课程详设（学习目标、评价方案、资源需求）。
 课程意图：{intent}
 驱动性问题：{driving_question}
@@ -369,7 +386,8 @@ def ai_action(data: AIAction):
         scene=data.scene or "博物馆研学",
         driving_question=data.driving_question or "（未填写）",
         duration=data.duration or "半天",
-        product=data.product or "（未定）")
+        product=data.product or "（未定）",
+        evaluation=data.evaluation or "（未填写）")
     content, err = _call_deepseek(prompt)
     if err:
         return {"ok": False, "error": err}
@@ -416,6 +434,36 @@ def ai_action(data: AIAction):
                 elif k == "评价方案": result["evaluation_detail"] = v.strip()
                 elif k == "资源需求": result["resources"] = v.strip()
         return {"ok": True, "result": result}
+    if data.action == "decompose":
+        phases = []
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or "|" not in line:
+                continue
+            parts = [x.strip() for x in line.split("|")]
+            if len(parts) >= 3:
+                phases.append({
+                    "sub_q": parts[0],
+                    "task": parts[1] if len(parts) > 1 else "",
+                    "output": parts[2] if len(parts) > 2 else "",
+                    "milestone": parts[3] if len(parts) > 3 else "",
+                })
+        return {"ok": True, "result": phases} if phases else {"ok": True, "result": content}
+    if data.action == "rubric":
+        rows = []
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or "|" not in line:
+                continue
+            parts = [x.strip() for x in line.split("|")]
+            if len(parts) >= 3:
+                rows.append({
+                    "criterion": parts[0],
+                    "evidence": parts[1] if len(parts) > 1 else "",
+                    "method": parts[2] if len(parts) > 2 else "",
+                    "timing": parts[3] if len(parts) > 3 else "",
+                })
+        return {"ok": True, "result": rows} if rows else {"ok": True, "result": content}
     return {"ok": True, "result": content}
 
 @app.post("/pbl-api/workshop/ai-questions")

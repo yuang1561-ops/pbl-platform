@@ -267,7 +267,7 @@
     </el-card>
 
     <!-- 课程工具包预览弹窗 -->
-    <el-dialog v-model="toolkitOpen" title="🛠️ 课程工具包（已填好的 PBL 工具卡）" width="720px" top="4vh" class="toolkit-dialog">
+    <el-dialog v-model="toolkitOpen" title="🛠️ 课程配套工具（可直接用于教学）" width="800px" top="4vh" class="toolkit-dialog">
       <div v-for="(card, ci) in toolkit" :key="ci" class="tk-card">
         <div class="tk-head">
           <span class="tk-icon">{{ card.icon }}</span>
@@ -276,6 +276,7 @@
             <div class="tk-desc">{{ card.desc }}</div>
           </div>
         </div>
+        <div v-if="card.note" class="tk-note">{{ card.note }}</div>
         <div v-if="card.rows">
           <div v-for="(r, ri) in card.rows" :key="ri" class="tk-row">
             <span class="tk-lbl">{{ r.label }}</span>
@@ -608,7 +609,10 @@ function printToolkit() {
         html += `<div class="row"><div class="lbl">${r.label}</div><div class="val"${r.highlight ? ' style="font-weight:700;color:#409eff"' : ''}>${(r.value || '').replace(/</g,'&lt;')}</div></div>`
       })
       if (card.checklist) {
-        card.checklist.forEach(c => html += `<div class="ck">${c.checked ? '☑' : '☐'} ${c.label}</div>`)
+        card.checklist.forEach(c => html += `<div class="ck">${c.checked ? '☑' : '☐'} ${c.label}${c.tip ? '（' + c.tip + '）' : ''}</div>`)
+      }
+      if (card.note) {
+        html += `<div style="margin:8px 0;padding:6px 12px;background:#fdf6ec;border-left:3px solid #e6a23c;border-radius:5px;font-size:13px;color:#e6a23c">${card.note.replace(/</g,'&lt;')}</div>`
       }
     }
     if (card.objectives && card.objectives.length) {
@@ -691,6 +695,7 @@ onMounted(async () => {
 .tk-icon { font-size: 22px; }
 .tk-name { font-weight: 700; }
 .tk-desc { font-size: 12px; color: #909399; }
+.tk-note { font-size: 12px; color: #e6a23c; background: #fdf6ec; border-left: 3px solid #e6a23c; padding: 6px 12px; border-radius: 5px; margin: 8px 16px; }
 .tk-row { display: flex; padding: 8px 16px; border-bottom: 1px dashed #f0f0f0; font-size: 14px; }
 .tk-row:last-of-type { border-bottom: none; }
 .tk-lbl { width: 170px; color: #909399; flex-shrink: 0; }
