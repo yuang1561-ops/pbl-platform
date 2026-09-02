@@ -14,20 +14,11 @@
         <el-step title="生成方案" description="导出 Word" />
       </el-steps>
 
-      <!-- 当前步骤相关工具卡 -->
-      <div class="tools-panel" v-if="stepTools.length">
-        <el-collapse>
-          <el-collapse-item :title="'🛠️ 本步相关工具（' + stepTools.length + '）— 点击展开查看'">
-            <div v-for="t in stepTools" :key="t.id" class="tool-card">
-              <div class="tool-head">
-                <span class="tool-name">{{ t.name }}</span>
-                <span class="tool-desc">{{ t.desc }}</span>
-                <el-button size="small" link type="primary" @click="printTool(t)">🖨️ 打印</el-button>
-              </div>
-              <pre class="tool-content">{{ t.content }}</pre>
-            </div>
-          </el-collapse-item>
-        </el-collapse>
+      <!-- 当前步骤用到的方法提示（轻量，不占空间） -->
+      <div class="method-tip" v-if="stepMethod">
+        <span class="method-label">📘 本步方法：</span>
+        <span class="method-text">{{ stepMethod }}</span>
+        <span class="method-note">填写内容将在最后一步生成工具卡</span>
       </div>
 
       <!-- 第 0 步：选起点 -->
@@ -162,6 +153,12 @@
           <div class="pv-item"><b>场景：</b>{{ form.scene || '—' }} ｜ <b>成果：</b>{{ form.product || '—' }}</div>
           <div class="pv-item"><b>评估：</b>{{ form.evaluation || '—' }}</div>
         </div>
+        <div class="toolkit-gen">
+          <el-button type="warning" size="large" @click="openToolkit">
+            🛠️ 生成课程工具包（预览本课全部工具卡）
+          </el-button>
+          <p class="toolkit-hint">把你在各步填写的内容，生成 4 张已填好的 PBL 工具卡（目标体系 / 驱动问题设计卡 / 五要素画布 / 实施计划表）</p>
+        </div>
         <div class="step-actions">
           <el-button @click="prev">上一步</el-button>
           <el-button type="primary" :loading="exporting" @click="exportDoc">导出 Word 方案</el-button>
@@ -170,6 +167,46 @@
         </div>
       </div>
     </el-card>
+
+    <!-- 课程工具包预览弹窗 -->
+    <el-dialog v-model="toolkitOpen" title="🛠️ 课程工具包（已填好的 PBL 工具卡）" width="720px" top="4vh" class="toolkit-dialog">
+      <div v-for="(card, ci) in toolkit" :key="ci" class="tk-card">
+        <div class="tk-head">
+          <span class="tk-icon">{{ card.icon }}</span>
+          <div>
+            <div class="tk-name">{{ card.name }}</div>
+            <div class="tk-desc">{{ card.desc }}</div>
+          </div>
+        </div>
+        <div v-if="card.rows">
+          <div v-for="(r, ri) in card.rows" :key="ri" class="tk-row">
+            <span class="tk-lbl">{{ r.label }}</span>
+            <span class="tk-val" :class="{ highlight: r.highlight }">{{ r.value }}</span>
+          </div>
+          <div v-if="card.checklist" class="tk-ck">
+            <span v-for="(c, i) in card.checklist" :key="i" class="ck-item" :class="{ on: c.checked }">
+              {{ c.checked ? '✅' : '⬜' }} {{ c.label }}
+            </span>
+          </div>
+        </div>
+        <div v-if="card.grid" class="tk-grid">
+          <div v-for="(g, gi) in card.grid" :key="gi" class="tk-gitem">
+            <div class="g-lbl">{{ g.label }}</div>
+            <div class="g-val">{{ g.value }}</div>
+          </div>
+        </div>
+        <table v-if="card.plan" class="tk-table">
+          <tr><th>阶段任务</th><th style="width:80px">时间</th></tr>
+          <tr v-for="(pl, pi) in card.plan" :key="pi">
+            <td>{{ pl.phase }}</td><td>{{ pl.time }}</td>
+          </tr>
+        </table>
+      </div>
+      <template #footer>
+        <el-button @click="toolkitOpen = false">关闭</el-button>
+        <el-button type="primary" @click="printToolkit">🖨️ 打印工具包</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="saveDialog" title="存入项目库" width="480px">
       <el-form label-position="top">
@@ -195,6 +232,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { get, post, saveWorkshop, loadWorkshop } from '../api'
+import { buildToolkit } from '../toolkit'
 
 const step = ref(0)
 const templates = ref([])
@@ -203,19 +241,17 @@ const saving = ref(false)
 const saveDialog = ref(false)
 const aiLoading = ref(false)
 const aiQuestions = ref([])
-const allTools = ref([])
+const toolkit = ref([])
+const toolkitOpen = ref(false)
 
-// 每步对应工具
-const STEP_TOOLS = {
-  1: ['tool2'],           // 定义意图 → PBL目标体系
-  2: ['tool1', 'tool7'],  // 驱动性问题 → 设计卡+分解表
-  3: ['tool3', 'tool4'],  // 立项五要素 → 画布+角色表
-  4: ['tool10', 'tool11', 'tool44'], // 生成方案 → 计划表+故事板+时间轴
+// 每步使用的方法说明（最后一步生成工具卡）
+const STEP_METHOD = {
+  1: 'PBL 目标体系 · 确定课程意图与学习目标',
+  2: '核心驱动问题设计卡 · 撰写与检验驱动性问题',
+  3: '立项五要素画布 · 定清项目全貌',
+  4: '工作计划表 · 排定实施阶段',
 }
-const stepTools = computed(() => {
-  const ids = STEP_TOOLS[step.value] || []
-  return allTools.value.filter(t => ids.includes(t.id))
-})
+const stepMethod = computed(() => STEP_METHOD[step.value] || '')
 const intentLoading = ref(false)
 const intentResult = ref('')
 const elementsLoading = ref(false)
@@ -369,13 +405,53 @@ async function exportDoc() {
   exporting.value = false
 }
 
-function printTool(t) {
+function openToolkit() {
+  toolkit.value = buildToolkit(form.value)
+  toolkitOpen.value = true
+}
+
+function printToolkit() {
+  const t = toolkit.value
+  let html = `<html><head><title>PBL 课程工具包</title>
+    <style>body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;padding:40px;line-height:1.7;color:#222}
+    h1{font-size:24px;border-bottom:3px solid #409eff;padding-bottom:10px}
+    .card{border:1px solid #dcdfe6;border-radius:10px;padding:18px 22px;margin:18px 0;page-break-inside:avoid}
+    .card h2{font-size:18px;margin:0 0 4px}.card .d{color:#666;font-size:13px;margin:0 0 12px}
+    .row{display:flex;border-bottom:1px dashed #ebeef5;padding:8px 0}.row:last-child{border:none}
+    .lbl{width:180px;color:#666;font-weight:600;flex-shrink:0}.val{flex:1}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px}
+    .g-item{border:1px solid #ebeef5;border-radius:6px;padding:8px 12px}
+    .g-lbl{font-size:12px;color:#909399}.g-val{font-size:14px;margin-top:2px}
+    .ck{color:#67c23a;font-size:13px;margin:3px 0}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{border:1px solid #dcdfe6;padding:8px 12px;text-align:left;font-size:14px}
+    th{background:#f5f7fa}</style></head><body>`
+  html += `<h1>PBL 课程工具包</h1><p style="color:#666">${new Date().toLocaleString('zh-CN')} · 由项目工坊生成</p>`
+  t.forEach(card => {
+    html += `<div class="card"><h2>${card.icon} ${card.name}</h2><p class="d">${card.desc}</p>`
+    if (card.rows) {
+      card.rows.forEach(r => {
+        html += `<div class="row"><div class="lbl">${r.label}</div><div class="val"${r.highlight ? ' style="font-weight:700;color:#409eff"' : ''}>${(r.value || '').replace(/</g,'&lt;')}</div></div>`
+      })
+      if (card.checklist) {
+        card.checklist.forEach(c => html += `<div class="ck">${c.checked ? '☑' : '☐'} ${c.label}</div>`)
+      }
+    }
+    if (card.grid) {
+      html += `<div class="grid">`
+      card.grid.forEach(g => html += `<div class="g-item"><div class="g-lbl">${g.label}</div><div class="g-val">${(g.value || '').replace(/</g,'&lt;')}</div></div>`)
+      html += `</div>`
+    }
+    if (card.plan) {
+      html += `<table><tr><th style="width:70%">阶段任务</th><th>时间</th></tr>`
+      card.plan.forEach(pl => html += `<tr><td>${pl.phase.replace(/</g,'&lt;')}</td><td>${pl.time}</td></tr>`)
+      html += `</table>`
+    }
+    html += `</div>`
+  })
+  html += `<script>window.onload=()=>window.print()</scr${'ipt'}></body></html>`
   const w = window.open('', '_blank')
-  w.document.write(`<html><head><title>${t.name}</title>
-    <style>body{font-family:"PingFang SC",sans-serif;padding:32px;line-height:1.8}
-    h1{font-size:22px}h2{font-size:17px;margin-top:24px}pre{white-space:pre-wrap;font-family:inherit;font-size:14px}</style></head>
-    <body><h1>${t.name}</h1><p style="color:#666">${t.desc}</p><pre>${t.content.replace(/</g,'&lt;')}</pre>
-    <script>window.onload=()=>window.print()</scr${'ipt'}></body></html>`)
+  w.document.write(html)
   w.document.close()
 }
 
@@ -384,7 +460,7 @@ onMounted(async () => {
   templates.value = d.templates
   const saved = loadWorkshop()
   if (saved) form.value = saved
-  try { const td = await get('/tools'); allTools.value = td.tools } catch (e) {}
+
 })
 </script>
 
@@ -401,12 +477,32 @@ onMounted(async () => {
 .t-title { font-weight: 600; margin-bottom: 4px; }
 .t-q { font-size: 12px; color: #909399; line-height: 1.5; }
 .step-actions { margin-top: 24px; display: flex; gap: 10px; }
-.tools-panel { margin: 16px 0 8px; }
-.tool-card { border: 1px solid #ebeef5; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; background: #fafbfc; }
-.tool-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.tool-name { font-weight: 600; font-size: 14px; white-space: nowrap; }
-.tool-desc { color: #909399; font-size: 12px; flex: 1; }
-.tool-content { white-space: pre-wrap; word-wrap: break-word; font-family: inherit; font-size: 13px; line-height: 1.7; color: #303133; background: #fff; border: 1px solid #f0f0f0; border-radius: 6px; padding: 10px 14px; max-height: 300px; overflow-y: auto; margin: 0; }
+.method-tip { margin: 14px 0 6px; background: #f0f9eb; border: 1px solid #e1f3d8; border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.method-label { font-weight: 600; color: #67c23a; }
+.method-text { color: #303133; }
+.method-note { margin-left: auto; color: #c0c4cc; font-size: 12px; }
+.toolkit-gen { margin: 16px 0; text-align: center; background: #fdf6ec; border: 1px dashed #e6a23c; border-radius: 10px; padding: 16px; }
+.toolkit-hint { color: #909399; font-size: 12px; margin: 8px 0 0; }
+.tk-card { border: 1px solid #e4e7ed; border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+.tk-head { display: flex; gap: 10px; align-items: center; background: #f5f7fa; padding: 12px 16px; border-bottom: 1px solid #e4e7ed; }
+.tk-icon { font-size: 22px; }
+.tk-name { font-weight: 700; }
+.tk-desc { font-size: 12px; color: #909399; }
+.tk-row { display: flex; padding: 8px 16px; border-bottom: 1px dashed #f0f0f0; font-size: 14px; }
+.tk-row:last-of-type { border-bottom: none; }
+.tk-lbl { width: 170px; color: #909399; flex-shrink: 0; }
+.tk-val { flex: 1; }
+.tk-val.highlight { font-weight: 700; color: #409eff; }
+.tk-ck { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px; }
+.ck-item { font-size: 12px; color: #c0c4cc; background: #f5f7fa; border-radius: 4px; padding: 3px 8px; }
+.ck-item.on { color: #67c23a; background: #f0f9eb; }
+.tk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 16px; }
+.tk-gitem { border: 1px solid #ebeef5; border-radius: 8px; padding: 8px 12px; background: #fafbfc; }
+.g-lbl { font-size: 12px; color: #909399; }
+.g-val { font-size: 14px; margin-top: 2px; }
+.tk-table { width: calc(100% - 32px); margin: 10px 16px 14px; border-collapse: collapse; }
+.tk-table th, .tk-table td { border: 1px solid #e4e7ed; padding: 7px 12px; font-size: 13px; text-align: left; }
+.tk-table th { background: #f5f7fa; }
 .ai-gen { margin: 12px 0; display: flex; align-items: center; gap: 10px; }
 .ai-result-box { margin: 10px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ai-result-text { flex: 1; font-size: 14px; line-height: 1.6; }
