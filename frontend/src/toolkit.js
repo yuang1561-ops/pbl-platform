@@ -1,8 +1,6 @@
 // 工坊工具包生成器：把导师在工坊各步填的内容，映射进结构化工具模板
 // 每张工具卡 = 一个可视化表格/卡片，字段值来自工坊表单
 
-// 各步填写内容与工具模板的映射
-
 function inferBeneficiary(form) {
   const s = (form.scene || '') + (form.product || '')
   if (/博物馆|展览|文物|展/.test(s)) return '同龄学生 / 参观者（面向展览观众）'
@@ -15,16 +13,26 @@ function inferBeneficiary(form) {
 export function buildToolkit(form) {
   const tools = []
 
-  // 卡1：PBL 目标体系（来自第1步 意图）
+  // 卡1：PBL 目标体系（来自第1步 意图 + 第4步 学习目标）
+  const objParts = []
+  const obj = form.objectives || ''
+  // objectives 形如 "知识：X；技能：Y；素养：Z"
+  if (obj) {
+    obj.split(/[；;]/).forEach(s => {
+      s = s.trim()
+      if (s) objParts.push({ k: s.split(/[：:]/)[0] || '目标', v: s.split(/[：:]/).slice(1).join('：').trim() || s })
+    })
+  }
   tools.push({
     name: 'PBL 目标体系',
     icon: '🎯',
-    desc: '项目要让学生学到什么（来自第 1 步·定义意图）',
+    desc: '课程目标（来自第 1 步·意图 + 第 4 步·学习目标）',
     rows: [
       { label: '课程意图', value: form.intent || '（待补充）' },
       { label: '目标受众', value: form.audience || '（待补充）' },
       { label: '解决的真实问题', value: form.scene || '（待补充）' },
     ],
+    objectives: objParts.length ? objParts : null,
   })
 
   // 卡2：核心驱动问题设计卡（来自第2步 驱动性问题）
@@ -60,18 +68,22 @@ export function buildToolkit(form) {
     ],
   })
 
-  // 卡4：工作计划表（来自第4步 计划）
-  const planLines = (form.plan || '')
-    .split('\n').filter(l => l.trim())
-    .map(l => {
-      const m = l.match(/^第[一二三0-9]+阶段\s*[：: ]?(.*?)(?:（约(.+?)）)?$/)
-      return { phase: m ? m[1] : l.trim(), time: m && m[2] ? m[2] : '—' }
-    })
+  // 卡4：实施计划表（来自第4步 结构化 phases）——5 列完整表格
+  const hasPhases = Array.isArray(form.phases) && form.phases.length > 0
   tools.push({
     name: '课程实施计划表',
     icon: '🗓️',
-    desc: '三阶段执行计划（来自第 4 步·实施计划）',
-    plan: planLines.length ? planLines : [{ phase: '（待补充实施计划）', time: '—' }],
+    desc: hasPhases ? '分阶段执行计划（来自第 4 步·课程详设）' : '分阶段执行计划',
+    planCols: ['阶段', '时间', '核心活动', '学生产出', '教师动作'],
+    planRows: hasPhases
+      ? form.phases.map((ph, i) => ({
+          name: ph.name || '阶段' + (i + 1),
+          time: ph.time || '—',
+          activities: ph.activities || '—',
+          output: ph.output || '—',
+          teacher: ph.teacher || '—'
+        }))
+      : [{ name: '（待补充）', time: '—', activities: '—', output: '—', teacher: '—' }],
   })
 
   return tools

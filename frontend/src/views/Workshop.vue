@@ -281,6 +281,12 @@
             <span class="tk-lbl">{{ r.label }}</span>
             <span class="tk-val" :class="{ highlight: r.highlight }">{{ r.value }}</span>
           </div>
+          <div v-if="card.objectives && card.objectives.length" class="tk-obj">
+            <div v-for="(o, oi) in card.objectives" :key="oi" class="tk-obj-row">
+              <span class="obj-tag">{{ o.k }}</span>
+              <span class="obj-val">{{ o.v }}</span>
+            </div>
+          </div>
           <div v-if="card.checklist" class="tk-ck">
             <span v-for="(c, i) in card.checklist" :key="i" class="ck-item" :class="{ on: c.checked }">
               {{ c.checked ? '✅' : '⬜' }} {{ c.label }}
@@ -293,10 +299,16 @@
             <div class="g-val">{{ g.value }}</div>
           </div>
         </div>
-        <table v-if="card.plan" class="tk-table">
-          <tr><th>阶段任务</th><th style="width:80px">时间</th></tr>
-          <tr v-for="(pl, pi) in card.plan" :key="pi">
-            <td>{{ pl.phase }}</td><td>{{ pl.time }}</td>
+        <table v-if="card.planCols" class="tk-table">
+          <tr>
+            <th v-for="(c, ci) in card.planCols" :key="ci" :style="ci === 0 ? 'width:14%' : (ci === 1 ? 'width:13%' : '')">{{ c }}</th>
+          </tr>
+          <tr v-for="(pl, pi) in card.planRows" :key="pi">
+            <td class="tk-phase">{{ pl.name }}</td>
+            <td>{{ pl.time }}</td>
+            <td>{{ pl.activities }}</td>
+            <td>{{ pl.output }}</td>
+            <td>{{ pl.teacher }}</td>
           </tr>
         </table>
       </div>
@@ -599,14 +611,21 @@ function printToolkit() {
         card.checklist.forEach(c => html += `<div class="ck">${c.checked ? '☑' : '☐'} ${c.label}</div>`)
       }
     }
+    if (card.objectives && card.objectives.length) {
+      html += `<div style="margin:8px 0">`
+      card.objectives.forEach(o => html += `<div style="padding:4px 10px;background:#f0f9eb;border-radius:5px;margin:3px 0"><b style="color:#67c23a">${o.k}</b>：${o.v.replace(/</g,'&lt;')}</div>`)
+      html += `</div>`
+    }
     if (card.grid) {
       html += `<div class="grid">`
       card.grid.forEach(g => html += `<div class="g-item"><div class="g-lbl">${g.label}</div><div class="g-val">${(g.value || '').replace(/</g,'&lt;')}</div></div>`)
       html += `</div>`
     }
-    if (card.plan) {
-      html += `<table><tr><th style="width:70%">阶段任务</th><th>时间</th></tr>`
-      card.plan.forEach(pl => html += `<tr><td>${pl.phase.replace(/</g,'&lt;')}</td><td>${pl.time}</td></tr>`)
+    if (card.planCols) {
+      html += `<table><tr>${card.planCols.map(c => '<th>' + c + '</th>').join('')}</tr>`
+      card.planRows.forEach(pl => {
+        html += `<tr><td><b>${(pl.name||'').replace(/</g,'&lt;')}</b></td><td>${(pl.time||'').replace(/</g,'&lt;')}</td><td>${(pl.activities||'').replace(/</g,'&lt;')}</td><td>${(pl.output||'').replace(/</g,'&lt;')}</td><td>${(pl.teacher||'').replace(/</g,'&lt;')}</td></tr>`
+      })
       html += `</table>`
     }
     html += `</div>`
@@ -684,7 +703,14 @@ onMounted(async () => {
 .tk-gitem { border: 1px solid #ebeef5; border-radius: 8px; padding: 8px 12px; background: #fafbfc; }
 .g-lbl { font-size: 12px; color: #909399; }
 .g-val { font-size: 14px; margin-top: 2px; }
+.tk-obj { display: flex; flex-direction: column; gap: 4px; padding: 4px 16px 8px; }
+.tk-obj-row { display: flex; gap: 10px; font-size: 13px; background: #f0f9eb; border-radius: 5px; padding: 4px 10px; }
+.obj-tag { color: #67c23a; font-weight: 600; flex-shrink: 0; min-width: 44px; }
+.obj-val { color: #444; }
 .tk-table { width: calc(100% - 32px); margin: 10px 16px 14px; border-collapse: collapse; }
+.tk-table th, .tk-table td { border: 1px solid #e4e7ed; padding: 6px 9px; font-size: 12.5px; text-align: left; vertical-align: top; line-height: 1.55; }
+.tk-table th { background: #f5f7fa; }
+.tk-phase { font-weight: 600; color: #409eff; }
 .tk-table th, .tk-table td { border: 1px solid #e4e7ed; padding: 7px 12px; font-size: 13px; text-align: left; }
 .tk-table th { background: #f5f7fa; }
 .ai-gen { margin: 12px 0; display: flex; align-items: center; gap: 10px; }
